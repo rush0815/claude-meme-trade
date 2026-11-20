@@ -426,7 +426,7 @@ def create_app(bot: "Bot") -> FastAPI:
         from ..agents.ai_analyst import MODELS
         model = body.get("model") if body.get("model") in MODELS else "claude-sonnet-5-5"
         try:
-            return await bot.advisor.suggest(bot.analyst, model=model)
+            return await bot.advisor.suggest(bot.analyst, model=model, force=bool(body.get("force")))
         except (ValueError, RuntimeError) as e:
             raise HTTPException(400, str(e)) from None
 

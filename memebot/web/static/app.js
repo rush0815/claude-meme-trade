@@ -679,22 +679,29 @@ async function loadAdvisor() {
       und die aktuellen Einstellungen gesendet. Nichts wird automatisch übernommen – du wählst aus.`,
       `Claude analyses the collected statistics and suggests changes. Only aggregated figures and the current settings are sent.
       Nothing is applied automatically – you choose.`)}</p>
-    <p>${L("Abgeschlossene Trades", "Closed trades")}: <b class="${enough ? "pos" : ""}">${d.closed_trades}</b> / ${d.min_trades}
-      ${enough ? "" : `<span class="muted"> – ${L("Vorschläge ab " + d.min_trades + " Trades, vorher wäre es Zufall.", "suggestions from " + d.min_trades + " trades, before that it would be noise.")}</span>`}</p>
+    <p>${L("Abgeschlossene Trades", "Closed trades")}: <b class="${enough ? "pos" : "neg"}">${d.closed_trades}</b> / ${d.min_trades}
+      ${enough ? "" : `<br><span class="hint">${L(`Noch zu wenig Daten: Unter ${d.min_trades} Trades ist die Statistik stark vom Zufall geprägt.
+        Ein Vorschlag ist möglich, aber nur bedingt aussagekräftig.`, `Not enough data yet: below ${d.min_trades} trades the statistics are
+        mostly noise. A suggestion is possible but of limited value.`)}</span>`}</p>
     ${d.has_key ? "" : `<p class="neg">${L("Kein API-Key – im Reiter KI-Analyst eintragen.", "No API key – enter it in the AI analyst tab.")}</p>`}
     <div class="form"><label>${L("Modell", "Model")}</label><span></span><select id="advModel">${models}</select></div>
-    <div class="buttons"><button class="btn" id="advGo" ${enough && d.has_key ? "" : "disabled"}>${L("Vorschlag holen (ca. 1–3 Cent)", "Get suggestion (approx. 1–3 cents)")}</button></div>`;
+    <div class="buttons"><button class="btn" id="advGo">${L("Vorschlag holen (ca. 1–3 Cent)", "Get suggestion (approx. 1–3 cents)")}</button></div>`;
   const go = $("advGo");
-  if (go) go.onclick = getSuggestion;
+  if (go) go.onclick = () => {
+    if (!d.has_key) { $("advMsg").textContent = L("Kein API-Key – bitte im Reiter KI-Analyst eintragen.", "No API key – please enter it in the AI analyst tab."); $("advMsg").className = "hint neg"; return; }
+    if (!enough && !confirm(L(`Erst ${d.closed_trades} von empfohlenen ${d.min_trades} abgeschlossenen Trades. Der Vorschlag ist dadurch wenig verlässlich. Trotzdem holen?`,
+      `Only ${d.closed_trades} of the recommended ${d.min_trades} closed trades. The suggestion will be unreliable. Get it anyway?`))) return;
+    getSuggestion(!enough);
+  };
   renderAdvHistory(d.history);
   if (advResult) renderAdvResult(advResult);
 }
 
-async function getSuggestion() {
+async function getSuggestion(force = false) {
   advBusy = true;
   $("advMsg").textContent = L("Claude analysiert … (bis zu 30 s)", "Claude is analysing … (up to 30 s)"); $("advMsg").className = "hint";
   const r = await fetch("/api/advisor/suggest", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: $("advModel").value }) });
+    body: JSON.stringify({ model: $("advModel").value, force }) });
   const j = await r.json();
   advBusy = false;
   if (!r.ok) { $("advMsg").textContent = L("Fehler: ", "Error: ") + (j.detail || r.status); $("advMsg").className = "hint neg"; return; }
@@ -710,6 +717,7 @@ function renderAdvResult(j) {
     <td class="num">${showVal(c.current)}</td><td class="num"><b>${showVal(c.value)}</b></td></tr>`).join("");
   $("advResult").innerHTML = `
     <h3>${L("Vorschlag", "Suggestion")} #${j.id} · ${L("Vertrauen", "confidence")}: <span class="${j.confidence === "high" ? "pos" : j.confidence === "low" ? "neg" : ""}">${confTxt(j.confidence)}</span></h3>
+    ${j.low_data ? `<p class="neg">${L(`Achtung: nur ${j.trades} Trades – Vorschlag mit Vorsicht behandeln.`, `Caution: only ${j.trades} trades – treat this suggestion with care.`)}</p>` : ""}
     <p>${esc(L(j.summary_de, j.summary_en || j.summary_de))}</p>
     ${j.changes.length ? `<div class="scroll"><table class="fills"><tr><th></th><th>${L("Einstellung / Begründung", "Setting / reason")}</th>
       <th class="num">${L("jetzt", "now")}</th><th class="num">${L("neu", "new")}</th></tr>${rows}</table></div>

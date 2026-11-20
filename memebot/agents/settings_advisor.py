@@ -85,6 +85,10 @@ class SettingsAdvisor(Agent):
         if not cfg["api_key"]:
             raise ValueError("kein Anthropic-API-Key gesetzt (Reiter KI-Analyst)")
         data = self.gather(analyst)
+        low_data = n < self.min_trades()
+        if low_data:
+            data["warning"] = (f"Only {n} closed trades (recommended minimum {self.min_trades()}). Statistics are "
+                               "unreliable: suggest at most 1–2 cautious changes or none, and set confidence to low.")
         system = ("You are a careful quantitative trading coach for a Solana meme-coin bot. You receive aggregated "
                   "paper-trading statistics and the bot's adjustable settings. Suggest a FEW changes (0–5) that are "
                   "clearly supported by the data; prefer no change over guessing. Small samples (<10 trades in a "
@@ -120,6 +124,9 @@ class SettingsAdvisor(Agent):
                             "reason_en": str(ch.get("reason_en") or "")[:300]})
         res["changes"] = changes
         res["confidence"] = res.get("confidence") if res.get("confidence") in ("low", "medium", "high") else "low"
+        if low_data:
+            res["confidence"] = "low"                      # bei zu wenig Daten nie mehr als "niedrig"
+            res["low_data"] = True
         rid = self.db.x("INSERT INTO advisor_runs(ts,model,trades,baseline,response,cost_usd) VALUES(?,?,?,?,?,?)",
                         (time.time(), model, n, json.dumps(data["overall"]), json.dumps(res), cost))
         self.log(f"Einstellungs-Vorschlag #{rid}: {len(changes)} Änderung(en), Vertrauen {res['confidence']} "
