@@ -148,6 +148,8 @@ def test_stop_loss(ctx):
     run(pm.tick({"M1": good_market(price_sol=entry * 0.75)}))
     p = ctx.db.position(pid)
     assert p["status"] == "closed" and p["exit_reason"] == "Stop-Loss" and p["pnl_sol"] < 0
+    sell = ctx.db.one("SELECT * FROM fills WHERE side='sell'")
+    assert abs(sell["market_price"] / entry - 0.75) < 1e-9 and sell["price"] < sell["market_price"]
 
 
 def test_take_profit_then_trailing(ctx):

@@ -167,9 +167,19 @@ async function showPosition(id) {
   const p = await api("/api/positions/" + id);
   const open = p.status === "open";
   const sd = p.score_details || {}, sec = p.security || {};
-  const fills = p.fills.map((f) => `<tr><td>${dt(f.ts)}</td><td>${f.side === "buy" ? "Kauf" : "Verkauf"}</td>
-    <td class="num">${sol(f.sol_amount)}</td><td>${esc(f.reason)}</td>
-    <td>${f.signature && f.signature !== "paper" ? `<a href="https://solscan.io/tx/${esc(f.signature)}" target="_blank">Tx</a>` : "paper"}</td></tr>`).join("");
+  const entry = +p.entry_price;
+  const vsEntry = (x) => (x && entry ? pct((x / entry - 1) * 100) : "–");
+  const fmtP = (x) => (x ? (+x).toExponential(3) : "–");
+  const tm = (ts) => new Date(ts * 1000).toLocaleTimeString("de-DE");
+  const fills = p.fills.map((f) => {
+    const buy = f.side === "buy";
+    const tx = f.signature && f.signature !== "paper" ? ` · <a href="https://solscan.io/tx/${esc(f.signature)}" target="_blank">Tx</a>` : "";
+    return `<tr><td>${tm(f.ts)}<br><span class="muted">${buy ? "Kauf" : esc(f.reason)}${tx}</span></td>
+    <td class="num">${sol(f.sol_amount)}</td>
+    <td class="num">${fmtP(f.price)}<br><span class="muted">Markt ${fmtP(f.market_price)}</span></td>
+    <td class="num"><span class="${buy ? "" : cls(f.price / entry - 1)}">${buy ? "Einstieg" : vsEntry(f.price)}</span><br>
+      <span class="muted">${buy ? "" : "Ausl. " + vsEntry(f.market_price)}</span></td></tr>`;
+  }).join("");
   $("modalContent").innerHTML = `
     <h2>${esc(p.symbol)} <span class="muted">${esc(p.name)}</span></h2>
     <div class="kv">
@@ -195,7 +205,9 @@ async function showPosition(id) {
       <div>Mint/Freeze</div><div>${sec.mint_authority ? "aktiv" : "entzogen"} / ${sec.freeze_authority ? "aktiv" : "entzogen"}</div>
     </div>
     <h2>Ausführungen</h2>
-    <div class="scroll"><table><tr><th>Zeit</th><th>Art</th><th class="num">SOL</th><th>Grund</th><th></th></tr>${fills}</table></div>
+    <p class="hint">Preise in SOL pro Token. „Markt“ = Kurs, bei dem der Bot entschieden hat; darüber der tatsächlich erzielte Preis
+      (inkl. Preiseinfluss, Gebühren, Sicherheitsabschlag). „Ausl.“ (Auslöser) = Abstand des Marktkurses zum Einstieg in dem Moment.</p>
+    <div class="scroll"><table class="fills"><tr><th>Zeit / Grund</th><th class="num">SOL</th><th class="num">Preis</th><th class="num">± Entry</th></tr>${fills}</table></div>
     ${open ? `<p><button class="btn small danger" id="closeBtn">Position jetzt verkaufen</button></p>` : ""}`;
   $("modal").classList.remove("hidden");
   if (open) $("closeBtn").onclick = async () => {

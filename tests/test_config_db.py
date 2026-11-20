@@ -24,3 +24,15 @@ def test_db_migrates_old_candidates_table(tmp_path):
     db.set_candidate("A", "waiting", "x", 52, "SYM", {"trend": 0})
     row = db.one("SELECT * FROM candidates WHERE mint='A'")
     assert row["score"] == 52 and '"trend"' in row["details"]
+
+
+def test_db_migrates_fills_market_price(tmp_path):
+    path = str(tmp_path / "old2.db")
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE fills (id INTEGER PRIMARY KEY AUTOINCREMENT, position_id INTEGER NOT NULL, ts REAL NOT NULL,"
+                " side TEXT NOT NULL, sol_amount REAL NOT NULL, token_amount REAL NOT NULL, price REAL NOT NULL,"
+                " reason TEXT, signature TEXT, fee_sol REAL NOT NULL DEFAULT 0)")
+    con.commit(); con.close()
+    db = DB(path)
+    db.add_fill(1, "sell", 0.1, 10, 0.01, "Stop-Loss", market_price=0.012)
+    assert db.one("SELECT market_price FROM fills")["market_price"] == 0.012

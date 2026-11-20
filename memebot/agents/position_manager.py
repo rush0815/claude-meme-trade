@@ -34,7 +34,7 @@ class PositionManager(Agent):
             entry_liquidity_usd=m.liquidity_usd, last_price=m.price_sol, high_price=fill.price,
             score=sig.score, score_details=json.dumps(sig.details), security=json.dumps(sig.security))
         self.db.add_fill(pid, "buy", fill.sol_amount, fill.token_amount, fill.price, "Einstieg",
-                         fill.signature, fill.fee_sol)
+                         fill.signature, fill.fee_sol, market_price=m.price_sol)
         self.log(f"KAUF {m.symbol}: {fill.sol_amount:.4f} SOL, Score {sig.score:.0f}", mint=m.mint)
         return pid
 
@@ -102,7 +102,7 @@ class PositionManager(Agent):
             return
         self._fail.pop(p["id"], None)
         self.db.add_fill(p["id"], "sell", fill.sol_amount, fill.token_amount, fill.price, reason,
-                         fill.signature, fill.fee_sol)
+                         fill.signature, fill.fee_sol, market_price=price)
         remaining = max(0.0, p["tokens_remaining"] - fill.token_amount)
         received = (p["sol_received"] or 0) + fill.sol_amount
         fields = {"tokens_remaining": remaining, "sol_received": received}

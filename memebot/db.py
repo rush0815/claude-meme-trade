@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS fills (
     price REAL NOT NULL,
     reason TEXT,
     signature TEXT,
-    fee_sol REAL NOT NULL DEFAULT 0
+    fee_sol REAL NOT NULL DEFAULT 0,
+    market_price REAL                             -- Marktpreis (DexScreener) im Moment der Entscheidung
 );
 CREATE INDEX IF NOT EXISTS ix_fills_pos ON fills(position_id);
 
@@ -106,6 +107,9 @@ class DB:
         cols = {r[1] for r in self.conn.execute("PRAGMA table_info(candidates)")}
         if "details" not in cols:
             self.conn.execute("ALTER TABLE candidates ADD COLUMN details TEXT")
+        fcols = {r[1] for r in self.conn.execute("PRAGMA table_info(fills)")}
+        if "market_price" not in fcols:
+            self.conn.execute("ALTER TABLE fills ADD COLUMN market_price REAL")
 
     # ------------------------------------------------------------- basics
     def q(self, sql: str, args: tuple | list = ()) -> list[dict]:
@@ -159,10 +163,12 @@ class DB:
         return self.x(f"INSERT INTO positions({cols}) VALUES({marks})", tuple(fields.values()))
 
     def add_fill(self, position_id: int, side: str, sol_amount: float, token_amount: float,
-                 price: float, reason: str, signature: str | None = None, fee_sol: float = 0.0) -> None:
-        self.x("INSERT INTO fills(position_id,ts,side,sol_amount,token_amount,price,reason,signature,fee_sol)"
-               " VALUES(?,?,?,?,?,?,?,?,?)",
-               (position_id, time.time(), side, sol_amount, token_amount, price, reason, signature, fee_sol))
+                 price: float, reason: str, signature: str | None = None, fee_sol: float = 0.0,
+                 market_price: float | None = None) -> None:
+        self.x("INSERT INTO fills(position_id,ts,side,sol_amount,token_amount,price,reason,signature,fee_sol,"
+               "market_price) VALUES(?,?,?,?,?,?,?,?,?,?)",
+               (position_id, time.time(), side, sol_amount, token_amount, price, reason, signature, fee_sol,
+                market_price))
 
     def realized_pnl_since(self, mode: str, since_ts: float) -> float:
         r = self.one("SELECT COALESCE(SUM(pnl_sol),0) AS s FROM positions WHERE mode=? AND status='closed'"
