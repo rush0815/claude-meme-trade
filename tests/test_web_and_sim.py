@@ -138,3 +138,27 @@ def test_mcap_spark_and_chart(tmp_path):
     ch = c.get(f"/api/positions/{p['id']}/chart").json()
     assert ch["is_mcap"] and ch["candles"] and ch["fills"][0]["side"] == "buy"
     assert all(k in ch["candles"][0] for k in ("time", "open", "high", "low", "close"))
+
+
+def test_chart_timeframes_and_supply_backfill(tmp_path):
+    import time as _t
+    from memebot.models import Market, Signal
+    bot = make_bot(tmp_path)
+    m = Market(mint="OLD1", symbol="OLD", price_sol=1e-6, price_usd=1.5e-4, fdv=150_000,
+               liquidity_usd=40_000, created_at=_t.time() - 3600)
+
+    async def go():
+        pid = await bot.positions.open(Signal(m, 70, {"ki_hinweis": "KI aus"}, {"decimals": 6}), 0.05)
+        bot.db.update_position(pid, supply=None, entry_mcap=None)          # wie eine Position von vor dem Update
+        bot.ctx.sol_usd = 0
+        bot._last_markets["OLD1"] = m
+        return pid
+    pid = asyncio.run(go())
+    c = TestClient(create_app(bot))
+    for tf in (1, 5, 15, 60):
+        ch = c.get(f"/api/positions/{pid}/chart?tf={tf}").json()
+        assert ch["tf"] == tf and ch["is_mcap"] and ch["entry_level"] > 0
+    p = bot.db.position(pid)
+    assert abs(p["supply"] - 1e9) < 1 and p["entry_mcap"] > 0            # nachgerüstet und gespeichert
+    det = c.get(f"/api/positions/{pid}").json()
+    assert det["score_details"]["ki_hinweis"] == "KI aus" and det["fills"][0]["mcap_usd"] > 0
