@@ -1,0 +1,8 @@
+{
+  "name": "claude-meme-trade",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "postCreateCommand": "pip install -r requirements.txt -r requirements-dev.txt && cp -n config.example.toml config.toml",
+  "forwardPorts": [8080],
+  "portsAttributes": { "8080": { "label": "Web-UI", "onAutoForward": "notify" } },
+  "customizations": { "vscode": { "extensions": ["ms-python.python"] } }
+}

@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+data/
+config.toml
+*.env
+!memebot.env.example
+.pytest_cache/

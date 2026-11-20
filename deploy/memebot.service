@@ -1,0 +1,24 @@
+[Unit]
+Description=Meme-Trade-Bot (Solana)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=memebot
+Group=memebot
+WorkingDirectory=/opt/memebot
+EnvironmentFile=/etc/memebot.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/memebot/.venv/bin/python -m memebot
+Restart=always
+RestartSec=10
+# Härtung
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/memebot/data
+
+[Install]
+WantedBy=multi-user.target
