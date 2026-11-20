@@ -200,3 +200,26 @@ def test_deep_check_trail_kept_after_reevaluation(tmp_path):
     d2 = c.get(f"/api/candidates/{row['mint']}").json()
     assert d2["deep"]["steps"] == d["deep"]["steps"] and d2["reason"] == "kein Momentum"
     assert c.get("/api/candidates/UNBEKANNT").json()["status"] == "expired"
+
+
+def test_deep_retry_pause(tmp_path):
+    import time as _t
+    from memebot.models import Market, Verdict
+    bot = make_bot(tmp_path)
+    m = Market(mint="RT1", symbol="RT", price_sol=1e-6, price_usd=1.5e-4, fdv=300_000, liquidity_usd=60_000,
+               created_at=_t.time() - 45 * 60, change_m5=8, change_h1=30, change_h6=40, buys_m5=90, sells_m5=40,
+               volume_m5=12_000, volume_h1=60_000)
+    calls = []
+
+    async def fake_rug(mk):
+        calls.append(1)
+        return Verdict(False, "Top-10-Holder halten 40%", {}, retry=True)
+    bot.rug.check = fake_rug
+    bot.db.upsert_candidate("RT1", "t")
+    asyncio.run(bot.evaluate({"mint": "RT1"}, m))
+    asyncio.run(bot.evaluate({"mint": "RT1"}, m))
+    row = bot.db.one("SELECT * FROM candidates WHERE mint='RT1'")
+    assert len(calls) == 1 and row["status"] == "waiting" and "erneute Tiefenprüfung in 10 min" in row["reason"]
+    bot._deep_wait["RT1"] = (_t.time() - 1, "x")                     # Pause vorbei -> neue Tiefenprüfung
+    asyncio.run(bot.evaluate({"mint": "RT1"}, m))
+    assert len(calls) == 2

@@ -61,6 +61,7 @@ class Bot:
         self._live_event = asyncio.Event()
         self.ui_event = asyncio.Event()
         self._last_markets: dict = {}
+        self._deep_wait: dict[str, tuple[float, str]] = {}   # mint -> (nächste Tiefenprüfung ab, letzter Grund)
         self.cycle_no = 0
         self.last_cycle_ts = 0.0
         self.status = "startet"
@@ -96,11 +97,19 @@ class Bot:
         if score < self.cfg.strategy.min_score:
             mark("waiting", f"Score {score:.0f} unter {self.cfg.strategy.min_score}")
             return
+        # Tiefenprüfung (RugCheck, Kerzen, KI …) nach einem vorläufigen Nein erst nach einer Pause wiederholen,
+        # damit wartende Coins eine neue Chance bekommen, ohne die APIs zu überlasten.
+        wait = self._deep_wait.get(mint)
+        if wait and time.time() < wait[0]:
+            mark("waiting", f"{wait[1]} – erneute Tiefenprüfung in {max(1, round((wait[0] - time.time()) / 60))} min")
+            return
         deep["active"] = True
         step("Stratege", True, f"Score {score:.0f}")
         sec = await self.rug.check(m)
         step("Rug-Analyst", sec.ok, sec.reason)
         if not sec.ok:
+            if sec.retry:
+                self._deep_wait[mint] = (time.time() + self.DEEP_RETRY_S, sec.reason)
             mark("waiting" if sec.retry else "rejected", sec.reason)
             return
         ph = await self.phase.check(m)
@@ -108,6 +117,8 @@ class Bot:
         if ph.details:
             details.update({k: v for k, v in ph.details.items() if k in ("vom_hoch_pct", "std_seit_hoch")})
         if not ph.ok:
+            if ph.retry:
+                self._deep_wait[mint] = (time.time() + self.DEEP_RETRY_S, ph.reason)
             mark("waiting" if ph.retry else "rejected", ph.reason)
             return
         ai = await self.ai.check(m, sec.details)          # optional, siehe Reiter "KI-Analyst"
@@ -139,6 +150,7 @@ class Bot:
         mark("bought" if pid else "waiting", "gekauft" if pid else "Kauf fehlgeschlagen")
 
     LIVE_MAX_AGE_S = 10
+    DEEP_RETRY_S = 10 * 60
 
     def price_info(self, mint: str) -> dict:
         if self.feed is None:
