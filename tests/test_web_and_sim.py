@@ -40,7 +40,8 @@ def test_web_api(tmp_path):
     bot = make_bot(tmp_path)
     asyncio.run(bot.cycle())
     c = TestClient(create_app(bot))
-    assert c.get("/").status_code == 200
+    r = c.get("/")
+    assert r.status_code == 200 and "app.js?v=" in r.text and r.headers["cache-control"] == "no-store"
     s = c.get("/api/summary").json()
     assert s["sim"] and s["mode"] == "paper"
     for path in ("/api/positions?state=open", "/api/positions?state=closed", "/api/equity", "/api/events",

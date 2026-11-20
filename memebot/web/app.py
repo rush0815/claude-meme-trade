@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import Body, Depends, FastAPI, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 
@@ -59,9 +59,17 @@ def create_app(bot: "Bot") -> FastAPI:
             p["unrealized_pct"] = p["unrealized_sol"] / p["size_sol"] * 100 if p["size_sol"] else 0
         return p
 
+    def asset_version() -> str:
+        # ändert sich bei jedem Update -> Browser lädt neue JS/CSS statt alter Kopie aus dem Cache
+        return str(int(max((STATIC / f).stat().st_mtime for f in ("app.js", "style.css", "index.html"))))
+
     @app.get("/", include_in_schema=False)
     def index(_: None = Depends(auth)):
-        return FileResponse(STATIC / "index.html")
+        v = asset_version()
+        html = (STATIC / "index.html").read_text(encoding="utf-8")
+        html = html.replace("/static/app.js", f"/static/app.js?v={v}").replace("/static/style.css",
+                                                                              f"/static/style.css?v={v}")
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
     @app.get("/api/summary")
     async def summary(_: None = Depends(auth)):
