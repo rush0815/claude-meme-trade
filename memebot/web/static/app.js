@@ -151,6 +151,7 @@ function scoreBlock(sd) {
       <div>Kurs 5m / 1h</div><div>${pct(sd.chg_m5)} / ${pct(sd.chg_h1)}</div>
       <div>Liquidität / FDV</div><div>$${(sd.liq_usd || 0).toLocaleString("de-DE")} / $${(sd.fdv_usd || 0).toLocaleString("de-DE")}</div>
       <div>Alter</div><div>${sd.alter_min ?? "–"} min</div>
+      <div>Abstand vom Hoch</div><div>${sd.vom_hoch_pct != null ? pct(sd.vom_hoch_pct) + " (Hoch vor " + sd.std_seit_hoch + " h)" : "–"}</div>
     </div>`;
 }
 
