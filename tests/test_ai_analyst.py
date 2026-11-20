@@ -108,3 +108,21 @@ def test_ai_web_api(tmp_path):
     assert "abcdefghij" not in json.dumps(d)                 # Key wird nie ausgeliefert
     assert set(d["usage"]) >= {"today", "week", "total", "daily", "recent"}
     assert c.post("/api/ai", json={"api_key": "falsch"}).status_code == 400
+
+
+def test_credit_tracking_and_csv(tmp_path):
+    ai, db = make(fake_api(score=80))
+    save_settings(db, {"credit_usd": 0.02})
+    asyncio.run(ai.check(M, {}))                          # kostet ~0,0106 $
+    cr = ai.credit()
+    assert cr["set_usd"] == 0.02 and cr["calls"] == 1 and abs(cr["remaining"] - (0.02 - cr["used_usd"])) < 1e-9
+    ai._cache.clear()
+    asyncio.run(ai.check(Market(mint="M2", symbol="B", price_sol=1e-6, created_at=time.time()), {}))
+    ai._cache.clear()
+    assert asyncio.run(ai.check(Market(mint="M3", symbol="C", price_sol=1e-6, created_at=time.time()), {})).reason \
+        == "KI-Guthaben aufgebraucht"
+    bot = make_bot(tmp_path)
+    c = TestClient(create_app(bot))
+    r = c.get("/api/ai/calls.csv")
+    assert r.status_code == 200 and r.text.startswith("zeit_utc;token")
+    assert c.post("/api/ai", json={"credit_usd": "5"}).json()["usage"]["credit"]["remaining"] == 5

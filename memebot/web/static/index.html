@@ -100,12 +100,17 @@
     </div>
     <div class="card">
       <h2 data-i18n="Token-Verbrauch">Token-Verbrauch</h2>
+      <div id="aiCredit"></div>
       <div class="kpis" id="aiKpis"></div>
       <div class="scroll"><table id="aiDaily"></table></div>
     </div>
     <div class="card">
       <h2 data-i18n="Letzte KI-Aufrufe">Letzte KI-Aufrufe</h2>
       <div class="scroll"><table id="aiRecent"></table></div>
+      <div class="buttons" style="margin-top:10px">
+        <button class="btn small" id="aiAll" data-i18n="Alle Aufrufe anzeigen">Alle Aufrufe anzeigen</button>
+        <a class="btn small" href="/api/ai/calls.csv" style="text-align:center;text-decoration:none" data-i18n="Als CSV herunterladen">Als CSV herunterladen</a>
+      </div>
     </div>
   </section>
 

@@ -502,7 +502,35 @@ function renderAISettings(d) {
   if (clr) clr.onclick = async (e) => { e.preventDefault(); if (confirm(L("API-Key löschen?", "Delete API key?"))) await saveAI({ clear_key: true }); };
 }
 
+let aiShowAll = false;
+function renderCredit(c) {
+  const box = c
+    ? kpi(L("Restguthaben (geschätzt)", "Remaining credit (estimate)"), usd(c.remaining, 2),
+        L(`${usd(c.set_usd, 2)} eingetragen ${ago(c.set_at)}, seitdem ${usd(c.used_usd, 4)} in ${c.calls} Aufrufen verbraucht`,
+          `${usd(c.set_usd, 2)} entered ${ago(c.set_at)}, since then ${usd(c.used_usd, 4)} used in ${c.calls} calls`),
+        c.remaining <= 0 ? "neg" : c.remaining < 1 ? "" : "pos")
+    : "";
+  $("aiCredit").innerHTML = `${box ? `<div class="kpis" style="grid-template-columns:1fr">${box}</div>` : ""}
+    ${c && c.remaining <= 1 ? `<p class="hint neg">${L("Guthaben fast aufgebraucht – in der Claude Console aufladen. Bei 0 pausiert die KI automatisch.",
+      "Credit almost used up – top up in the Claude Console. At 0 the AI pauses automatically.")}</p>` : ""}
+    <div class="form"><label for="aiCreditIn">${L("Aktuelles Guthaben laut Claude Console (USD)", "Current credit per Claude Console (USD)")}</label>
+      <input id="aiCreditIn" type="number" inputmode="decimal" step="0.01" min="0" placeholder="${c ? c.remaining.toFixed(2) : "z. B. 5.00"}"></div>
+    <div class="buttons"><button class="btn small" id="aiCreditSave">${L("Guthaben übernehmen", "Set credit")}</button></div>
+    <p class="hint">${L(`Anthropic bietet für Einzelkonten keine Schnittstelle, um das Guthaben abzufragen. Trag deshalb den Stand aus
+      platform.claude.com (Settings → Billing) ein; der Bot zieht davon die Kosten seiner eigenen Aufrufe ab. Nutzt du den Key auch
+      anderswo, ist der echte Stand niedriger – dann ab und zu neu eintragen.`,
+      `Anthropic offers no API to read the credit balance for individual accounts. Enter the balance from platform.claude.com
+      (Settings → Billing); the bot subtracts the cost of its own calls. If you use the key elsewhere too, the real balance is lower –
+      re-enter it from time to time.`)}</p>`;
+  $("aiCreditSave").onclick = async () => {
+    const v = $("aiCreditIn").value.trim();
+    if (v === "") return;
+    await saveAI({ credit_usd: v });
+  };
+}
+
 function renderAIUsage(u) {
+  renderCredit(u.credit);
   const box = (label, a) => kpi(label, usd(a.cost, 3), `${a.calls} ${L("Aufrufe", "calls")} · ${num(a.inp)} / ${num(a.out)} Tok.` +
     (a.searches ? ` · ${a.searches} ${L("Suchen", "searches")}` : "") + (a.errors ? ` · ${a.errors} ${L("Fehler", "errors")}` : ""));
   $("aiKpis").innerHTML = box(L("Heute (UTC)", "Today (UTC)"), u.today) + box(L("7 Tage", "7 days"), u.week) +
@@ -513,14 +541,25 @@ function renderAIUsage(u) {
     (u.daily.map((r) => `<tr><td>${esc(r.day)}</td><td class="num">${r.calls}</td><td class="num">${num(r.inp)}</td>
       <td class="num">${num(r.out)}</td><td class="num">${r.searches || 0}</td><td class="num">${usd(r.cost)}</td></tr>`).join("")
       || `<tr><td colspan="6" class="muted">${L("noch keine Aufrufe", "no calls yet")}</td></tr>`);
-  $("aiRecent").innerHTML = `<tr><th>${L("Zeit", "Time")}</th><th>Token</th><th class="num">Score</th><th>${L("Urteil", "Verdict")}</th>
-    <th class="num">Tok. in/out</th><th class="num">${L("Kosten", "Cost")}</th></tr>` +
-    (u.recent.map((r) => `<tr><td>${dt(r.ts)}</td><td>${esc(r.symbol || "–")}</td>
+  if (!aiShowAll) renderCalls(u.recent, u.total);
+}
+
+function renderCalls(rows, total) {
+  const sum = rows.reduce((a, r) => a + (r.cost_usd || 0), 0);
+  $("aiRecent").innerHTML = `<tr><th>${L("Zeit / Token", "Time / token")}</th><th class="num">Score</th><th>${L("Urteil", "Verdict")}</th>
+    <th class="num">${L("Kosten", "Cost")}</th></tr>` +
+    (rows.map((r) => `<tr><td>${dt(r.ts)}<br><span class="muted">${esc(r.symbol || "–")}</span></td>
       <td class="num">${r.score != null ? Math.round(r.score) : "–"}</td>
       <td style="white-space:normal">${r.ok ? esc(r.verdict || "") : `<span class="neg">${esc(r.error || L("Fehler", "error"))}</span>`}</td>
-      <td class="num">${num(r.input_tokens)} / ${num(r.output_tokens)}</td><td class="num">${usd(r.cost_usd, 5)}</td></tr>`).join("")
-      || `<tr><td colspan="6" class="muted">${L("noch keine Aufrufe", "no calls yet")}</td></tr>`);
+      <td class="num">${usd(r.cost_usd, 5)}<br><span class="muted">${num(r.input_tokens)}/${num(r.output_tokens)} Tok.${r.searches ? " · " + r.searches + L(" Suche", " search") : ""}</span></td></tr>`).join("")
+      || `<tr><td colspan="4" class="muted">${L("noch keine Aufrufe", "no calls yet")}</td></tr>`) +
+    (rows.length ? `<tr><td colspan="3"><b>${L(`Summe (${rows.length} Aufrufe${total && total.calls > rows.length ? " von " + total.calls : ""})`,
+      `Total (${rows.length} calls${total && total.calls > rows.length ? " of " + total.calls : ""})`)}</b></td><td class="num"><b>${usd(sum, 4)}</b></td></tr>` : "");
 }
+$("aiAll").onclick = async () => {
+  aiShowAll = true;
+  renderCalls(await api("/api/ai/calls?limit=5000"));
+};
 
 async function saveAI(extra) {
   const body = extra || {

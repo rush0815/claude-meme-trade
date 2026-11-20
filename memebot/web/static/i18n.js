@@ -30,6 +30,7 @@ const UI_EN = {
   "Sprache der Oberfläche. Wird in diesem Browser gespeichert.": "Interface language. Stored in this browser.",
   "KI-Analyst": "AI analyst", "Verbindung testen": "Test connection", "Token-Verbrauch": "Token usage",
   "Letzte KI-Aufrufe": "Recent AI calls", "Nach KI-Score": "By AI score",
+  "Alle Aufrufe anzeigen": "Show all calls", "Als CSV herunterladen": "Download as CSV",
 };
 const t = (s) => (LANG === "en" ? (UI_EN[s] ?? s) : s);
 
@@ -135,7 +136,7 @@ const PATTERNS_EN = [
   [/^Tagesbudget von (.+) \$ erreicht – KI pausiert bis Mitternacht \(UTC\)$/, "Daily budget of $1 $ reached – AI paused until midnight (UTC)"],
   [/^KI-Einstellungen geändert: (.+)$/, "AI settings changed: $1"],
   [/^KI aus$/, "AI analyst switched off"], [/^KI ohne API-Key$/, "no API key set"],
-  [/^KI-Budget erreicht$/, "daily budget reached"], [/^keine KI-Prüfungen aktiv$/, "no AI checks enabled"],
+  [/^KI-Budget erreicht$/, "daily budget reached"], [/^KI-Guthaben aufgebraucht$/, "API credit used up"], [/^keine KI-Prüfungen aktiv$/, "no AI checks enabled"],
   [/^KI nicht erreichbar$/, "AI unreachable"], [/^KI-Antwort nicht lesbar$/, "AI answer unreadable"],
   [/^ohne KI$/, "without AI"], [/^KI (.+)$/, "AI $1"],
   // Analyst
