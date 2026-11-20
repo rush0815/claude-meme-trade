@@ -82,7 +82,7 @@ def test_geckoterminal_mints_skip_bonding_curve():
     gt = GeckoTerminal(client=client("https://api.geckoterminal.com/api/v2", h))
     found = asyncio.run(gt.latest_mints())
     mints = {m for m, _ in found}
-    assert mints == {"AAApump"} and len(found) == 4      # 4 Abfragen, je 1 Treffer
+    assert mints == {"AAApump"} and len(found) == 2      # 2 Abfragen pro Runde, je 1 Treffer
 
 
 def test_helius_migration_parsing():
