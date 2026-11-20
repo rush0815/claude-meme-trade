@@ -151,6 +151,8 @@ def main() -> None:
     p.add_argument("--check", action="store_true", help="nur Verbindungen zu allen APIs testen")
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    for noisy in ("httpx", "httpcore", "websockets"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)   # keine Zeile pro HTTP-Anfrage
     asyncio.run(main_async(args))
 
 
