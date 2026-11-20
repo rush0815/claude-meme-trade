@@ -97,6 +97,8 @@ class Bot:
             mark("waiting" if ph.retry else "rejected", ph.reason)
             return
         ai = await self.ai.check(m, sec.details)          # optional, siehe Reiter "KI-Analyst"
+        if not ai.details:
+            details["ki_hinweis"] = ai.reason                 # warum es keine KI-Bewertung gibt
         if ai.details:
             details.update({k: v for k, v in ai.details.items() if k in ("ki_score", "ki_urteil_de", "ki_urteil_en",
                                                                         "ki_red_flags", "ki_modus")})

@@ -65,3 +65,13 @@ class GeckoTerminal:
         payload = await self.http.get(f"/networks/solana/pools/{pool}/ohlcv/minute", params=params, retries=2)
         rows = (((payload or {}).get("data") or {}).get("attributes") or {}).get("ohlcv_list") or []
         return sorted(([float(x) for x in r[:6]] for r in rows if len(r) >= 6), key=lambda r: r[0])
+
+    async def candles_tf(self, pool: str, unit: str = "minute", aggregate: int = 1, limit: int = 300,
+                         before: float | None = None) -> list[list[float]]:
+        """Kerzen in beliebigem Zeitraster (unit minute|hour|day, aggregate laut GeckoTerminal)."""
+        params = {"aggregate": str(aggregate), "limit": str(limit)}
+        if before:
+            params["before_timestamp"] = str(int(before))
+        payload = await self.http.get(f"/networks/solana/pools/{pool}/ohlcv/{unit}", params=params, retries=2)
+        rows = (((payload or {}).get("data") or {}).get("attributes") or {}).get("ohlcv_list") or []
+        return sorted(([float(x) for x in r[:6]] for r in rows if len(r) >= 6), key=lambda r: r[0])

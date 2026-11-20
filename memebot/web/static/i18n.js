@@ -134,6 +134,9 @@ const PATTERNS_EN = [
   [/^(.+?): KI-Antwort nicht lesbar – Entscheidung ohne KI$/, "$1: AI answer unreadable – deciding without AI"],
   [/^Tagesbudget von (.+) \$ erreicht – KI pausiert bis Mitternacht \(UTC\)$/, "Daily budget of $1 $ reached – AI paused until midnight (UTC)"],
   [/^KI-Einstellungen geändert: (.+)$/, "AI settings changed: $1"],
+  [/^KI aus$/, "AI analyst switched off"], [/^KI ohne API-Key$/, "no API key set"],
+  [/^KI-Budget erreicht$/, "daily budget reached"], [/^keine KI-Prüfungen aktiv$/, "no AI checks enabled"],
+  [/^KI nicht erreichbar$/, "AI unreachable"], [/^KI-Antwort nicht lesbar$/, "AI answer unreadable"],
   [/^ohne KI$/, "without AI"], [/^KI (.+)$/, "AI $1"],
   // Analyst
   [/^Noch zu wenig Daten \((\d+) Trades\)\. Aussagekräftig wird es ab ca\. 30–50 Trades\.$/, "Not enough data yet ($1 trades). Meaningful from about 30–50 trades."],

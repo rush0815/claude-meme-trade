@@ -227,15 +227,17 @@ function scoreBlock(sd) {
 }
 
 // ---------------------------------------------------------------- Trade-Chart (TradingView Lightweight Charts)
-const tv = { chart: null, series: null, pid: null, last: null, isMcap: true };
+const tv = { chart: null, series: null, pid: null, last: null, isMcap: true, tf: 1 };
 const TZ = -new Date().getTimezoneOffset() * 60;            // Chart zeigt Ortszeit
 const LEVEL_COLOR = { sl: "#f85149", be: "#d29922", tp: "#3fb950", trail: "#7c8cff" };
 
 async function renderTradeChart(p) {
   const el = $("tvChart");
   if (!el || !window.LightweightCharts) return;
+  if (tv.chart) { tv.chart.remove(); tv.chart = null; }
+  el.innerHTML = "";
   let d;
-  try { d = await api(`/api/positions/${p.id}/chart`); } catch (e) { el.innerHTML = `<p class="muted">${L("Chart nicht verfügbar", "Chart unavailable")}</p>`; return; }
+  try { d = await api(`/api/positions/${p.id}/chart?tf=${tv.tf}`); } catch (e) { el.innerHTML = `<p class="muted">${L("Chart nicht verfügbar", "Chart unavailable")}</p>`; return; }
   if (!d.candles.length) { el.innerHTML = `<p class="muted">${L("Noch keine Kursdaten für den Chart.", "No price data for the chart yet.")}</p>`; return; }
   const LW = window.LightweightCharts;
   const chart = LW.createChart(el, {
@@ -244,28 +246,30 @@ async function renderTradeChart(p) {
     grid: { vertLines: { color: "#1d232b" }, horzLines: { color: "#1d232b" } },
     rightPriceScale: { borderColor: "#262d36" },
     timeScale: { borderColor: "#262d36", timeVisible: true, secondsVisible: false },
-    localization: { priceFormatter: d.is_mcap ? fmtMC : (x) => x.toExponential(2) },
+    localization: { priceFormatter: d.is_mcap ? fmtMC : (x) => "$" + x.toExponential(2) },
     crosshair: { mode: 0 },
   });
   const series = chart.addSeries(LW.CandlestickSeries, {
     upColor: "#3fb950", downColor: "#f85149", borderVisible: false, wickUpColor: "#3fb950", wickDownColor: "#f85149",
-    priceFormat: { type: "custom", formatter: d.is_mcap ? fmtMC : (x) => x.toExponential(2), minMove: 1e-12 },
+    priceFormat: { type: "custom", formatter: d.is_mcap ? fmtMC : (x) => "$" + x.toExponential(2), minMove: 1e-12 },
   });
   series.setData(d.candles.map((c) => ({ ...c, time: c.time + TZ })));
-  const legend = [];
-  if (d.entry_mcap) {
-    series.createPriceLine({ price: d.entry_mcap, color: "#c9d1d9", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: L("Einstieg", "Entry") });
-    legend.push(`<span><i style="border-color:#c9d1d9"></i>${L("Einstieg", "Entry")} ${fmtMC(d.entry_mcap)}</span>`);
+  const fmtV = d.is_mcap ? fmtMC : (x) => "$" + x.toExponential(2);
+  const legend = [`<span>${d.is_mcap ? L("Marktkapitalisierung in USD", "Market cap in USD") : L("Preis in USD (Token-Menge unbekannt)", "Price in USD (token supply unknown)")}</span>`];
+  if (d.entry_level) {
+    series.createPriceLine({ price: d.entry_level, color: "#7c8cff", lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: L("Einstieg", "Entry") });
+    legend.push(`<span><i style="border-color:#7c8cff"></i>${L("Einstieg", "Entry")} ${fmtV(d.entry_level)}</span>`);
   }
   for (const lv of d.levels) {
     series.createPriceLine({ price: lv.value, color: LEVEL_COLOR[lv.kind], lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: lv.label });
-    legend.push(`<span><i style="border-color:${LEVEL_COLOR[lv.kind]}"></i>${esc(lv.label)} ${fmtMC(lv.value)}</span>`);
+    legend.push(`<span><i style="border-color:${LEVEL_COLOR[lv.kind]}"></i>${esc(lv.label)} ${fmtV(lv.value)}</span>`);
   }
-  for (const f of d.fills.filter((f) => f.side === "sell")) {
-    series.createPriceLine({ price: f.mcap, color: "#e3b341", lineWidth: 1, lineStyle: 0, axisLabelVisible: false, title: tr(f.reason) });
-  }
+  d.fills.filter((f) => f.side === "sell").forEach((f, i) => {
+    series.createPriceLine({ price: f.mcap, color: "#e3b341", lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: "Exit " + (i + 1) });
+    legend.push(`<span><i style="border-color:#e3b341"></i>Exit ${i + 1}: ${esc(tr(f.reason))} ${fmtV(f.mcap)}</span>`);
+  });
   const markers = d.fills.map((f) => ({
-    time: Math.floor(f.time / 60) * 60 + TZ, position: f.side === "buy" ? "belowBar" : "aboveBar",
+    time: Math.floor(f.time / (60 * d.tf)) * 60 * d.tf + TZ, position: f.side === "buy" ? "belowBar" : "aboveBar",
     color: f.side === "buy" ? "#7c8cff" : "#e3b341", shape: f.side === "buy" ? "arrowUp" : "arrowDown",
     text: f.side === "buy" ? L("Kauf", "Buy") : tr(f.reason),
   }));
@@ -274,7 +278,7 @@ async function renderTradeChart(p) {
   $("tvLegend").innerHTML = legend.join("");
   chart.timeScale().fitContent();
   Object.assign(tv, { chart, series, pid: p.id, last: { ...d.candles[d.candles.length - 1], time: d.candles[d.candles.length - 1].time + TZ },
-    isMcap: d.is_mcap, open: d.status === "open" });
+    isMcap: d.is_mcap, open: d.status === "open", step: 60 * d.tf, conv: d.is_mcap ? null : (d.sol_usd || 1) });
 }
 
 // Echtzeit: letzten Kurs aus dem Live-Push in die laufende Minute einarbeiten
@@ -282,9 +286,9 @@ function updateTradeChart(openRows) {
   if (!tv.chart || !tv.open) return;
   const p = openRows.find((x) => x.id === tv.pid);
   if (!p) return;
-  const v = tv.isMcap ? p.last_mcap : p.last_price;
+  const v = tv.isMcap ? p.last_mcap : p.last_price * tv.conv;
   if (!v) return;
-  const t = Math.floor(Date.now() / 60000) * 60 + TZ;
+  const t = Math.floor(Date.now() / 1000 / tv.step) * tv.step + TZ;
   if (tv.last && tv.last.time === t) {
     tv.last = { ...tv.last, high: Math.max(tv.last.high, v), low: Math.min(tv.last.low, v), close: v };
   } else if (!tv.last || t > tv.last.time) {
@@ -293,8 +297,12 @@ function updateTradeChart(openRows) {
   tv.series.update(tv.last);
 }
 
-function aiBlock(sd) {
-  if (sd.ki_score == null) return "";
+function aiBlock(sd, candidate = false) {
+  if (sd.ki_score == null && candidate && !sd.ki_hinweis) return "";   // KI läuft erst ganz am Ende der Prüfkette
+  if (sd.ki_score == null) {
+    const why = sd.ki_hinweis ? tr(sd.ki_hinweis) : L("vor Einbau des KI-Analysten gekauft", "bought before the AI analyst existed");
+    return `<h2>${L("KI-Analyst", "AI analyst")}</h2><p class="muted">${L("Keine Bewertung", "No rating")}: ${esc(why)}</p>`;
+  }
   const flags = (sd.ki_red_flags || []).map((f) => `<li>${esc(f)}</li>`).join("");
   return `<h2>${L("KI-Analyst", "AI analyst")} <span class="muted">(${sd.ki_modus === "filter" ? L("Filter", "filter") : L("nur beobachten", "observe only")})</span></h2>
     <div class="kv">
@@ -323,7 +331,6 @@ async function showPosition(id) {
   const authority = (x) => (x ? L("aktiv", "active") : L("entzogen", "revoked"));
   $("modalContent").innerHTML = `
     <h2>${esc(p.symbol)} <span class="muted">${esc(p.name)}</span></h2>
-    <div id="tvChart"></div><div class="legend" id="tvLegend"></div>
     <div class="kv">
       <div>Status</div><div>${open ? L("offen", "open") : L("geschlossen – ", "closed – ") + esc(tr(p.exit_reason))}</div>
       <div>${L("Ergebnis", "Result")}</div><div class="${cls(open ? p.unrealized_sol : p.pnl_sol)}">${sol(open ? p.unrealized_sol : p.pnl_sol)} SOL (${pct(open ? p.unrealized_pct : p.pnl_pct)})</div>
@@ -356,8 +363,17 @@ async function showPosition(id) {
       "Trig." (trigger) = distance of the market price from the entry at the moment of the decision.`)}</p>
     <div class="scroll"><table class="fills"><tr><th>${L("Zeit / Grund", "Time / reason")}</th><th class="num">SOL</th>
       <th class="num">${L("Marktkap.", "Mkt cap")}</th><th class="num">± Entry</th></tr>${fills}</table></div>
+    <div class="card-head" style="margin-top:14px"><h2>Chart</h2>
+      <div class="seg" id="tfSeg">${[1, 5, 15, 60].map((m) => `<button data-tf="${m}" class="${m === tv.tf ? "active" : ""}">${m < 60 ? m + "m" : "1h"}</button>`).join("")}</div>
+    </div>
+    <div id="tvChart"></div><div class="legend" id="tvLegend"></div>
     ${open ? `<p><button class="btn small danger" id="closeBtn">${L("Position jetzt verkaufen", "Sell position now")}</button></p>` : ""}`;
   $("modal").classList.remove("hidden");
+  document.querySelectorAll("#tfSeg button").forEach((b) => b.onclick = () => {
+    document.querySelectorAll("#tfSeg button").forEach((x) => x.classList.toggle("active", x === b));
+    tv.tf = +b.dataset.tf;
+    renderTradeChart(p);
+  });
   renderTradeChart(p);
   if (open) $("closeBtn").onclick = async () => {
     if (!confirm(L("Position verkaufen?", "Sell position?"))) return;
@@ -401,7 +417,7 @@ function showCandidate(c) {
     </div>
     <h2>${L("Bewertung (Stratege)", "Rating (strategist)")}</h2>
     ${Object.keys(sd).length ? scoreBlock(sd) : `<p class="muted">${L("Noch keine Marktdaten.", "No market data yet.")}</p>`}
-    ${aiBlock(sd)}`;
+    ${aiBlock(sd, true)}`;
   $("modal").classList.remove("hidden");
 }
 
