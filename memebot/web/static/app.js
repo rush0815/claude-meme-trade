@@ -663,7 +663,86 @@ function renderDataInfo() {
       equity curve: one point per minute + live point</div>`);
 }
 
+// ---------------------------------------------------------------- KI-Einstellungsvorschlag
+let advResult = null, advBusy = false;
+const CONF = { low: ["niedrig", "low"], medium: ["mittel", "medium"], high: ["hoch", "high"] };
+const confTxt = (c) => (CONF[c] ? L(CONF[c][0], CONF[c][1]) : "–");
+const showVal = (v) => (typeof v === "number" ? (Math.round(v * 1000) / 1000).toString() : esc(v));
+
+async function loadAdvisor() {
+  const d = await api("/api/advisor");
+  const prevModel = $("advModel") ? $("advModel").value : "claude-sonnet-5-5";
+  const enough = d.closed_trades >= d.min_trades;
+  const models = Object.entries(d.models).map(([k, v]) => `<option value="${esc(k)}" ${k === prevModel ? "selected" : ""}>${esc(v)}</option>`).join("");
+  if (!advBusy) $("advInfo").innerHTML = `
+    <p class="hint">${L(`Claude wertet die gesammelte Statistik aus und schlägt Änderungen vor. Es werden nur zusammengefasste Kennzahlen
+      und die aktuellen Einstellungen gesendet. Nichts wird automatisch übernommen – du wählst aus.`,
+      `Claude analyses the collected statistics and suggests changes. Only aggregated figures and the current settings are sent.
+      Nothing is applied automatically – you choose.`)}</p>
+    <p>${L("Abgeschlossene Trades", "Closed trades")}: <b class="${enough ? "pos" : ""}">${d.closed_trades}</b> / ${d.min_trades}
+      ${enough ? "" : `<span class="muted"> – ${L("Vorschläge ab " + d.min_trades + " Trades, vorher wäre es Zufall.", "suggestions from " + d.min_trades + " trades, before that it would be noise.")}</span>`}</p>
+    ${d.has_key ? "" : `<p class="neg">${L("Kein API-Key – im Reiter KI-Analyst eintragen.", "No API key – enter it in the AI analyst tab.")}</p>`}
+    <div class="form"><label>${L("Modell", "Model")}</label><span></span><select id="advModel">${models}</select></div>
+    <div class="buttons"><button class="btn" id="advGo" ${enough && d.has_key ? "" : "disabled"}>${L("Vorschlag holen (ca. 1–3 Cent)", "Get suggestion (approx. 1–3 cents)")}</button></div>`;
+  const go = $("advGo");
+  if (go) go.onclick = getSuggestion;
+  renderAdvHistory(d.history);
+  if (advResult) renderAdvResult(advResult);
+}
+
+async function getSuggestion() {
+  advBusy = true;
+  $("advMsg").textContent = L("Claude analysiert … (bis zu 30 s)", "Claude is analysing … (up to 30 s)"); $("advMsg").className = "hint";
+  const r = await fetch("/api/advisor/suggest", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: $("advModel").value }) });
+  const j = await r.json();
+  advBusy = false;
+  if (!r.ok) { $("advMsg").textContent = L("Fehler: ", "Error: ") + (j.detail || r.status); $("advMsg").className = "hint neg"; return; }
+  $("advMsg").textContent = L(`Kosten: ${usd(j.cost_usd, 4)}`, `Cost: ${usd(j.cost_usd, 4)}`);
+  advResult = j;
+  renderAdvResult(j);
+  loadAdvisor();
+}
+
+function renderAdvResult(j) {
+  const rows = j.changes.map((c) => `<tr><td><input type="checkbox" data-adv="${esc(c.key)}" checked></td>
+    <td style="white-space:normal"><b>${esc(L(c.label, c.label_en || c.label))}</b><br><span class="muted">${esc(L(c.reason_de, c.reason_en || c.reason_de))}</span></td>
+    <td class="num">${showVal(c.current)}</td><td class="num"><b>${showVal(c.value)}</b></td></tr>`).join("");
+  $("advResult").innerHTML = `
+    <h3>${L("Vorschlag", "Suggestion")} #${j.id} · ${L("Vertrauen", "confidence")}: <span class="${j.confidence === "high" ? "pos" : j.confidence === "low" ? "neg" : ""}">${confTxt(j.confidence)}</span></h3>
+    <p>${esc(L(j.summary_de, j.summary_en || j.summary_de))}</p>
+    ${j.changes.length ? `<div class="scroll"><table class="fills"><tr><th></th><th>${L("Einstellung / Begründung", "Setting / reason")}</th>
+      <th class="num">${L("jetzt", "now")}</th><th class="num">${L("neu", "new")}</th></tr>${rows}</table></div>
+      <div class="buttons" style="margin-top:10px"><button class="btn" id="advApply">${L("Ausgewählte übernehmen", "Apply selected")}</button></div>`
+      : `<p class="muted">${L("Keine Änderung empfohlen – Einstellungen beibehalten.", "No change recommended – keep the settings.")}</p>`}
+    ${j.watch_de ? `<p class="hint">${L("Worauf achten", "What to watch")}: ${esc(L(j.watch_de, j.watch_en || j.watch_de))}</p>` : ""}`;
+  const btn = $("advApply");
+  if (btn) btn.onclick = async () => {
+    const keys = [...document.querySelectorAll("[data-adv]")].filter((c) => c.checked).map((c) => c.dataset.adv);
+    if (!keys.length) return;
+    const r = await fetch(`/api/advisor/${j.id}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keys }) });
+    const res = await r.json();
+    $("advMsg").textContent = r.ok ? L(`${res.applied.length} Einstellung(en) übernommen ✓`, `${res.applied.length} setting(s) applied ✓`)
+      : L("Fehler: ", "Error: ") + (res.detail || r.status);
+    $("advMsg").className = "hint " + (r.ok ? "pos" : "neg");
+    if (r.ok) { advResult = null; $("advResult").innerHTML = ""; settingsLoaded = false; loadConfig(); }
+  };
+}
+
+function renderAdvHistory(hist) {
+  const k = (x) => (x && x.trades ? `${x.trades} Tr. · ${x.winrate_pct}% · Ø ${pct(x.avg_pnl_pct)} · PF ${x.profit_factor ?? "–"}` : "–");
+  $("advHistory").innerHTML = hist.length ? hist.map((h) => `
+    <div class="row" style="cursor:default">
+      <div class="sym">#${h.id} · ${dt(h.ts)}</div><div class="meta" style="text-align:right">${confTxt(h.confidence)} · ${usd(h.cost_usd, 4)}</div>
+      <div class="meta" style="grid-column:1/-1">${h.applied.length
+        ? L("Übernommen", "Applied") + ": " + h.applied.map((a) => `${esc(L(a.label, a.label_en || a.label))} ${showVal(a.old)} → <b>${showVal(a.new)}</b>`).join(", ")
+        : L(`Nicht übernommen (${h.changes.length} Vorschläge)`, `Not applied (${h.changes.length} suggestions)`)}</div>
+      ${h.applied_at ? `<div class="meta" style="grid-column:1/-1">${L("Vorher", "Before")}: ${k(h.before)}<br>${L("Seitdem", "Since")}: <span class="${h.after && h.before && h.after.avg_pnl_pct > h.before.avg_pnl_pct ? "pos" : ""}">${k(h.after)}</span></div>` : ""}
+    </div>`).join("") : `<p class="muted">${L("Noch keine Vorschläge.", "No suggestions yet.")}</p>`;
+}
+
 async function loadConfig() {
+  loadAdvisor();
   renderDataInfo();
   $("cfg").textContent = JSON.stringify(await api("/api/config"), null, 2);
   if (settingsLoaded) return;          // Eingaben beim Auto-Refresh nicht überschreiben

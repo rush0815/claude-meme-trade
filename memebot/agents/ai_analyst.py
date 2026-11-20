@@ -109,8 +109,8 @@ def utc_day_start() -> float:
     return datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 
 
-def parse_json(text: str) -> dict | None:
-    """Äußeres JSON-Objekt mit "score" aus der Antwort holen (die KI schreibt manchmal Text drumherum)."""
+def parse_json(text: str, key: str = "score") -> dict | None:
+    """Äußeres JSON-Objekt mit dem Feld `key` aus der Antwort holen (die KI schreibt manchmal Text drumherum)."""
     found, i = None, 0
     while (i := text.find("{", i)) != -1:
         depth, j = 0, i
@@ -125,7 +125,7 @@ def parse_json(text: str) -> dict | None:
         except ValueError:
             i += 1
             continue
-        if isinstance(obj, dict) and "score" in obj:
+        if isinstance(obj, dict) and key in obj:
             found = obj                     # letztes vollständiges äußeres Objekt gewinnt
         i = j + 1                           # verschachtelte Objekte überspringen
     return found
@@ -146,7 +146,8 @@ class AIAnalyst(Agent):
         r = self.db.one("SELECT COALESCE(SUM(cost_usd),0) AS c FROM ai_calls WHERE ts>=?", (utc_day_start(),))
         return float(r["c"]) if r else 0.0
 
-    def _record(self, m: Market | None, model: str, usage: dict, score=None, verdict="", ok=True, error="") -> float:
+    def _record(self, m: Market | None, model: str, usage: dict, score=None, verdict="", ok=True, error="",
+                label: str = "Test") -> float:
         inp = int(usage.get("input_tokens") or 0) + int(usage.get("cache_read_input_tokens") or 0) \
             + int(usage.get("cache_creation_input_tokens") or 0)
         out = int(usage.get("output_tokens") or 0)
@@ -155,7 +156,7 @@ class AIAnalyst(Agent):
         c = cost(model, inp, out, s)
         self.db.x("INSERT INTO ai_calls(ts,mint,symbol,model,input_tokens,output_tokens,searches,fetches,cost_usd,score,"
                   "verdict,ok,error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                  (time.time(), m.mint if m else None, m.symbol if m else "Test", model, inp, out, s, f, c, score,
+                  (time.time(), m.mint if m else None, m.symbol if m else label, model, inp, out, s, f, c, score,
                    verdict, 1 if ok else 0, error[:300]))
         return c
 
@@ -166,7 +167,8 @@ class AIAnalyst(Agent):
         usage_total: dict[str, Any] = {"input_tokens": 0, "output_tokens": 0, "server_tool_use": {}}
         text = ""
         for _ in range(3):                         # pause_turn bei Server-Tools: höchstens zweimal fortsetzen
-            body = {"model": cfg["model"], "max_tokens": 1200, "system": system, "messages": messages}
+            body = {"model": cfg["model"], "max_tokens": int(cfg.get("max_tokens", 1200)), "system": system,
+                    "messages": messages}
             if tools:
                 body["tools"] = tools
             r = await self.client.post(API_URL, headers=headers, json=body)

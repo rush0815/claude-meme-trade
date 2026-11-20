@@ -31,12 +31,14 @@ const UI_EN = {
   "KI-Analyst": "AI analyst", "Verbindung testen": "Test connection", "Token-Verbrauch": "Token usage",
   "Letzte KI-Aufrufe": "Recent AI calls", "Nach KI-Score": "By AI score",
   "Alle Aufrufe anzeigen": "Show all calls", "Trades pro Wochentag": "Trades per weekday",
-  "Trades pro Tageszeit": "Trades per hour of day", "diese Woche": "this week", "2 Wochen": "2 weeks",
+  "Trades pro Tageszeit": "Trades per hour of day", "KI-Einstellungsvorschlag": "AI settings suggestion",
+  "Verlauf der Vorschläge": "Suggestion history", "diese Woche": "this week", "2 Wochen": "2 weeks",
   "3 Wochen": "3 weeks", "Tage": "days", "Als CSV herunterladen": "Download as CSV",
 };
 const t = (s) => (LANG === "en" ? (UI_EN[s] ?? s) : s);
 
-const AGENT_EN = { "Stratege": "Strategist", "Phasen-Analyst": "Phase analyst", "KI-Analyst": "AI analyst" };
+const AGENT_EN = { "Stratege": "Strategist", "Phasen-Analyst": "Phase analyst", "KI-Analyst": "AI analyst",
+  "Einstellungs-Berater": "Settings advisor" };
 const STATUS = {
   de: { new: "neu", waiting: "wartet", rejected: "abgelehnt", bought: "gekauft", expired: "abgelaufen" },
   en: { new: "new", waiting: "waiting", rejected: "rejected", bought: "bought", expired: "expired" },
@@ -137,6 +139,8 @@ const PATTERNS_EN = [
   [/^(.+?): KI-Antwort nicht lesbar – Entscheidung ohne KI$/, "$1: AI answer unreadable – deciding without AI"],
   [/^Tagesbudget von (.+) \$ erreicht – KI pausiert bis Mitternacht \(UTC\)$/, "Daily budget of $1 $ reached – AI paused until midnight (UTC)"],
   [/^KI-Einstellungen geändert: (.+)$/, "AI settings changed: $1"],
+  [/^Einstellungs-Vorschlag #(\d+): (\d+) Änderung\(en\), Vertrauen (\w+) \((.+) ct\)$/, "Settings suggestion #$1: $2 change(s), confidence $3 ($4 ct)"],
+  [/^Einstellungs-Vorschlag #(\d+) übernommen: (.+)$/, "Settings suggestion #$1 applied: $2"],
   [/^KI aus$/, "AI analyst switched off"], [/^KI ohne API-Key$/, "no API key set"],
   [/^KI-Budget erreicht$/, "daily budget reached"], [/^KI-Guthaben aufgebraucht$/, "API credit used up"], [/^keine KI-Prüfungen aktiv$/, "no AI checks enabled"],
   [/^KI nicht erreichbar$/, "AI unreachable"], [/^KI-Antwort nicht lesbar$/, "AI answer unreadable"],
