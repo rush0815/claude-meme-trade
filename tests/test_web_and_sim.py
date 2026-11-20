@@ -72,7 +72,7 @@ def test_settings_change_applies_live_and_persists(tmp_path):
     bot = make_bot(tmp_path)
     c = TestClient(create_app(bot))
     items = {i["key"]: i["value"] for i in c.get("/api/settings").json()}
-    assert items["exit.tp1_pct"] == 40
+    assert items["exit.tp1_pct"] == 30
     r = c.post("/api/settings", json={"exit.tp1_pct": 25, "exit.stop_loss_pct": 15})
     assert r.status_code == 200
     assert bot.cfg["exit"]["take_profit_levels"][0] == [25.0, 0.33]

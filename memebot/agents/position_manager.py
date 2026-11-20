@@ -52,6 +52,9 @@ class PositionManager(Agent):
             return "Liquidität eingebrochen", 1.0
         if pnl <= -e.stop_loss_pct:
             return "Stop-Loss", 1.0
+        be_on = float(e.get("breakeven_activate_pct", 0) or 0)
+        if be_on > 0 and (high / entry - 1) * 100 >= be_on and pnl <= float(e.get("breakeven_floor_pct", 3)):
+            return "Break-even-Stop", 1.0
         levels = e.take_profit_levels
         hits = int(p["tp_hits"] or 0)
         if hits < len(levels) and pnl >= levels[hits][0]:
