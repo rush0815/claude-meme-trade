@@ -35,7 +35,7 @@ class Scout(Agent):
 
     async def due(self) -> list[tuple[dict, Market | None]]:
         sc = self.cfg.scout
-        cands = self.db.due_candidates(sc.recheck_seconds, limit=60)
+        cands = self.db.due_candidates(sc.recheck_seconds, limit=int(sc.get("batch_per_cycle", 150)))
         if not cands:
             return []
         markets = await self.ctx.dex.markets([c["mint"] for c in cands])

@@ -95,6 +95,8 @@ def create_app(bot: "Bot") -> FastAPI:
             "open_count": len(open_pos), "min_score": bot.cfg.strategy.min_score,
             "feed_enabled": bot.feed is not None, "feed_connected": bool(bot.feed and bot.feed.connected),
             "watchlist": db.one("SELECT COUNT(*) AS n FROM candidates WHERE status IN ('new','waiting')")["n"],
+            "watch_oldest_s": (lambda r: time.time() - r["t"] if r and r["t"] else None)(
+                db.one("SELECT MIN(last_checked) AS t FROM candidates WHERE status='waiting'")),
             "stats": st["gesamt"], "last24h": st["letzte_24h"],
         }
 

@@ -30,6 +30,10 @@ min_age_min = 15                # ganz frische Launches meiden (Sniper/Rugs)
 max_age_min = 480              # 8 h: danach ist der Hype meist vorbei
 recheck_seconds = 30            # Kandidat erneut prüfen, wenn er noch nicht reif war
 max_watchlist = 400
+batch_per_cycle = 150           # so viele Kandidaten pro Zyklus (15 s) neu prüfen – 1 DexScreener-Anfrage je 30 Coins
+dead_after_min = 60             # älter als 60 min und ...
+dead_liquidity_usd = 5000       # ... Liquidität darunter oder ...
+dead_volume_h1_usd = 2000       # ... Volumen 1 h darunter -> endgültig aus der Watchlist
 
 [filters]
 min_liquidity_usd = 20000
