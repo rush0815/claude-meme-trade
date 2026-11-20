@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 import time
 
@@ -16,6 +17,7 @@ from .agents.scout import Scout
 from .agents.strategist import Strategist
 from .models import Signal
 from .sources import helius_migrations
+from .sources.helius_prices import PoolPriceFeed
 from .sources.pumpportal import stream_migrations
 
 log = logging.getLogger("memebot")
@@ -48,6 +50,13 @@ class Bot:
         self.risk = RiskManager(ctx, self.portfolio)
         self.positions = PositionManager(ctx, self.executor, self.portfolio)
         self.analyst = Analyst(ctx)
+        # Echtzeit-Kurse (Helius) + Benachrichtigung der Web-Oberfläche
+        self.feed: PoolPriceFeed | None = None
+        self.live: dict[str, tuple[float, float]] = {}      # mint -> (Preis, Zeitpunkt)
+        self._live_dirty: set[str] = set()
+        self._live_event = asyncio.Event()
+        self.ui_event = asyncio.Event()
+        self._last_markets: dict = {}
         self.cycle_no = 0
         self.last_cycle_ts = 0.0
         self.status = "startet"
@@ -100,11 +109,60 @@ class Bot:
         pid = await self.positions.open(Signal(m, score, details, sec.details), size)
         mark("bought" if pid else "waiting", "gekauft" if pid else "Kauf fehlgeschlagen")
 
+    LIVE_MAX_AGE_S = 10
+
+    def price_info(self, mint: str) -> dict:
+        if self.feed is None:
+            return {"source": "dexscreener", "note": "Live-Kurse aus (kein Helius-Key)"}
+        return self.feed.info(mint)
+
+    def _on_live_price(self, mint: str, price: float) -> None:
+        self.live[mint] = (price, time.time())
+        self._live_dirty.add(mint)
+        self._live_event.set()
+
+    async def live_loop(self) -> None:
+        """Reagiert sofort auf Live-Kurse aus der Blockchain (max. 4x pro Sekunde)."""
+        while not self.stop.is_set():
+            try:
+                await asyncio.wait_for(self._live_event.wait(), timeout=1)
+            except asyncio.TimeoutError:
+                continue
+            self._live_event.clear()
+            mints, self._live_dirty = self._live_dirty, set()
+            markets = {}
+            for mint in mints:
+                base = self._last_markets.get(mint)
+                if base is not None:          # Liquidität etc. aus DexScreener, Preis live
+                    markets[mint] = dataclasses.replace(base, price_sol=self.live[mint][0])
+            if markets:
+                try:
+                    await self.positions.tick(markets, only=set(markets))
+                except Exception as e:
+                    log.exception("Live-Kurs-Verarbeitung")
+                    self.db.log("Position-Manager", f"Fehler (Live): {e}", "error")
+                self.ui_event.set()
+            await asyncio.sleep(0.25)
+
     async def position_tick(self) -> None:
         open_pos = self.db.open_positions(self.ctx.mode)
-        if open_pos:
-            markets = await self.ctx.dex.markets([p["mint"] for p in open_pos])
-            await self.positions.tick(markets)
+        if not open_pos:
+            if self.feed:
+                self.feed.set_positions({})
+            return
+        markets = await self.ctx.dex.markets([p["mint"] for p in open_pos])
+        self._last_markets.update(markets)
+        now = time.time()
+        for mint, m in list(markets.items()):
+            lv = self.live.get(mint)
+            if lv and now - lv[1] < self.LIVE_MAX_AGE_S:   # frischer Live-Kurs schlägt DexScreener
+                markets[mint] = dataclasses.replace(m, price_sol=lv[0])
+        if self.feed:
+            self.feed.set_positions({p["mint"]: (p["pair_address"] or "",
+                                                 self._last_markets[p["mint"]].price_sol
+                                                 if p["mint"] in self._last_markets else 0.0) for p in open_pos})
+        await self.positions.tick(markets)
+        self.ui_event.set()
 
     async def position_loop(self) -> None:
         """Eigene schnelle Schleife für offene Positionen (Stop-Loss, Take-Profit, Trailing)."""
@@ -147,6 +205,10 @@ class Bot:
         self.db.log("Orchestrator", f"Bot gestartet im Modus {self.ctx.mode.upper()}"
                     + (f", Wallet {self.wallet}" if self.wallet else ""))
         tasks = [asyncio.create_task(self.position_loop())]
+        if self.ctx.rpc is not None and self.cfg.get("live_prices", True) and not self.cfg.get("_sim"):
+            self.feed = PoolPriceFeed(self.ctx.rpc, self.cfg.api.rpc_url, self._on_live_price,
+                                      on_status=lambda msg, lvl: self.db.log("Position-Manager", msg, lvl))
+            tasks += [asyncio.create_task(self.feed.run(self.stop)), asyncio.create_task(self.live_loop())]
         if self.cfg.scout.get("use_helius_migrations", True) and self.ctx.rpc is not None:
             tasks.append(asyncio.create_task(helius_migrations.stream_migrations(
                 self.ctx.rpc, self.cfg.api.rpc_url, self.scout.on_migration, self.stop,

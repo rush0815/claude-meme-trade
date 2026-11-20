@@ -1,6 +1,7 @@
 """Position-Manager: überwacht offene Positionen und löst Ausstiege aus."""
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 
@@ -18,6 +19,7 @@ class PositionManager(Agent):
         self.ex = executor
         self.pf = portfolio
         self._fail: dict[int, int] = {}
+        self._lock = asyncio.Lock()     # DexScreener-Schleife und Live-Kurse nie gleichzeitig verkaufen lassen
 
     # ------------------------------------------------------------ Eröffnen
     async def open(self, sig: Signal, size_sol: float) -> int | None:
@@ -74,9 +76,15 @@ class PositionManager(Agent):
             return "Zeitlimit", 1.0
         return None
 
-    async def tick(self, markets: dict[str, Market]) -> None:
+    async def tick(self, markets: dict[str, Market], only: set[str] | None = None) -> None:
+        async with self._lock:
+            await self._tick(markets, only)
+
+    async def _tick(self, markets: dict[str, Market], only: set[str] | None) -> None:
         now = time.time()
         for p in self.db.open_positions(self.ctx.mode):
+            if only is not None and p["mint"] not in only:
+                continue
             m = markets.get(p["mint"])
             if m and m.price_sol > 0:
                 p["last_price"] = m.price_sol
