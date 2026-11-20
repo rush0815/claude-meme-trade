@@ -10,7 +10,7 @@ def test_user_config_overlays_defaults(tmp_path):
     cfg = load_config(p)
     assert cfg.risk.max_open_positions == 2                 # eigener Wert gewinnt
     assert cfg.risk.position_pct == 0.03                    # Rest aus den Standardwerten
-    assert cfg["position_poll_seconds"] == 3                # neue Einstellung automatisch da
+    assert cfg["position_poll_seconds"] == 2                # neue Einstellung automatisch da
 
 
 def test_db_migrates_old_candidates_table(tmp_path):

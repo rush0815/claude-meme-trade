@@ -26,6 +26,8 @@ class Bot:
         self.ctx = ctx
         self.cfg = ctx.cfg
         self.db = ctx.db
+        from .overrides import load_into
+        load_into(self.cfg, self.db)          # Änderungen aus der Web-Oberfläche
         self.stop = asyncio.Event()
         wallet = None
         if ctx.mode == "live":
@@ -106,7 +108,7 @@ class Bot:
 
     async def position_loop(self) -> None:
         """Eigene schnelle Schleife für offene Positionen (Stop-Loss, Take-Profit, Trailing)."""
-        interval = float(self.cfg.get("position_poll_seconds", 3))
+        interval = float(self.cfg.get("position_poll_seconds", 2))
         while not self.stop.is_set():
             t0 = time.monotonic()
             try:

@@ -32,7 +32,7 @@ document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
 });
 document.querySelectorAll("#rangeSeg button").forEach((b) => b.onclick = () => {
   document.querySelectorAll("#rangeSeg button").forEach((x) => x.classList.toggle("active", x === b));
-  hours = +b.dataset.h; loadEquity();
+  hours = +b.dataset.h; loadEquity(true);
 });
 $("agentFilter").onchange = () => loadAgents();
 $("modalClose").onclick = () => $("modal").classList.add("hidden");
@@ -70,9 +70,16 @@ async function loadSummary() {
     kpi("Max. Drawdown", st.max_drawdown_pct != null ? st.max_drawdown_pct + "%" : "–", "vom Höchststand");
 }
 
-async function loadEquity() {
-  const rows = await api("/api/equity?hours=" + hours);
-  drawChart($("equityChart"), rows.map((r) => [r.ts, r.equity_sol]), lastSummary?.start_sol);
+let eqRows = [], eqLoaded = 0;
+async function loadEquity(force) {
+  // Verlauf alle 30 s neu laden, dazwischen nur den aktuellen Live-Punkt anhängen
+  if (force || Date.now() - eqLoaded > 30000) {
+    eqRows = await api("/api/equity?hours=" + hours);
+    eqLoaded = Date.now();
+  }
+  const pts = eqRows.map((r) => [r.ts, r.equity_sol]);
+  if (lastSummary) pts.push([lastSummary.now, lastSummary.equity_sol]);
+  drawChart($("equityChart"), pts, lastSummary?.start_sol);
 }
 
 function drawChart(cv, pts, baseline) {
@@ -257,9 +264,25 @@ async function loadAnalysis() {
   $("byScore").innerHTML = aggTable(a.nach_score, "Score");
 }
 
+let settingsLoaded = false;
 async function loadControl() {
   $("cfg").textContent = JSON.stringify(await api("/api/config"), null, 2);
+  if (settingsLoaded) return;          // Eingaben beim Auto-Refresh nicht überschreiben
+  const items = await api("/api/settings");
+  $("settingsForm").innerHTML = items.map((it) => `<label for="s_${esc(it.key)}">${esc(it.label)}</label>
+    <input id="s_${esc(it.key)}" data-key="${esc(it.key)}" type="number" inputmode="decimal" step="any"
+      min="${it.min}" max="${it.max}" value="${it.value}">`).join("");
+  settingsLoaded = true;
 }
+$("saveSettings").onclick = async () => {
+  const body = {};
+  document.querySelectorAll("#settingsForm input").forEach((i) => body[i.dataset.key] = i.value);
+  const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  $("settingsMsg").textContent = r.ok ? "Gespeichert ✓" : "Fehler: " + (j.detail || r.status);
+  $("settingsMsg").className = "hint " + (r.ok ? "pos" : "neg");
+  if (r.ok) { settingsLoaded = false; loadControl(); }
+};
 
 // ---------------------------------------------------------------- Refresh
 async function refresh() {
@@ -276,5 +299,11 @@ async function refresh() {
   }
 }
 refresh();
-setInterval(() => { if (!document.hidden && $("modal").classList.contains("hidden")) refresh(); }, 5000);
+// Übersicht alle 2 s (nur Datenbank-Lesen, belastet den Bot nicht), andere Tabs alle 5 s
+let tick = 0;
+setInterval(() => {
+  tick++;
+  if (document.hidden || !$("modal").classList.contains("hidden")) return;
+  if (tab === "overview" || tick % 5 === 0) refresh();
+}, 2000);
 window.addEventListener("resize", () => tab === "overview" && loadEquity());
