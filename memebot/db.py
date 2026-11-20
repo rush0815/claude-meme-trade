@@ -108,6 +108,18 @@ CREATE TABLE IF NOT EXISTS ai_calls (
 );
 CREATE INDEX IF NOT EXISTS ix_ai_ts ON ai_calls(ts);
 
+CREATE TABLE IF NOT EXISTS advisor_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL,
+    model TEXT,
+    trades INTEGER,
+    baseline TEXT,                                -- Kennzahlen zum Zeitpunkt des Vorschlags
+    response TEXT,                                -- Vorschlag (JSON)
+    applied TEXT,                                 -- übernommene Änderungen (JSON)
+    applied_at REAL,
+    cost_usd REAL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

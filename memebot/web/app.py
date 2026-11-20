@@ -414,6 +414,31 @@ def create_app(bot: "Bot") -> FastAPI:
         except Exception as e:
             raise HTTPException(400, f"Test fehlgeschlagen: {e}") from None
 
+    # ------------------------------------------------------------ Einstellungs-Berater
+    @app.get("/api/advisor")
+    def advisor_get(_: None = Depends(auth)):
+        from ..agents.ai_analyst import MODELS, settings as ai_settings
+        return {"closed_trades": len(bot.advisor.closed()), "min_trades": bot.advisor.min_trades(),
+                "has_key": bool(ai_settings(db)["api_key"]), "models": MODELS, "history": bot.advisor.history()}
+
+    @app.post("/api/advisor/suggest")
+    async def advisor_suggest(body: dict = Body(default={}), _: None = Depends(auth)):
+        from ..agents.ai_analyst import MODELS
+        model = body.get("model") if body.get("model") in MODELS else "claude-sonnet-5-5"
+        try:
+            return await bot.advisor.suggest(bot.analyst, model=model)
+        except (ValueError, RuntimeError) as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.post("/api/advisor/{rid}/apply")
+    def advisor_apply(rid: int, body: dict = Body(...), _: None = Depends(auth)):
+        try:
+            res = bot.advisor.apply(rid, list(body.get("keys") or []))
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        stats_cache["t"] = 0
+        return res
+
     @app.post("/api/control/{action}")
     def control(action: str, _: None = Depends(auth)):
         if action == "pause":

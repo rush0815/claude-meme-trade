@@ -8,6 +8,7 @@ import time
 
 from .agents.ai_analyst import AIAnalyst
 from .agents.analyst import Analyst
+from .agents.settings_advisor import SettingsAdvisor
 from .agents.base import Ctx
 from .agents.executor import LiveExecutor, PaperExecutor
 from .agents.phase_analyst import PhaseAnalyst
@@ -52,6 +53,7 @@ class Bot:
         self.risk = RiskManager(ctx, self.portfolio)
         self.positions = PositionManager(ctx, self.executor, self.portfolio)
         self.analyst = Analyst(ctx)
+        self.advisor = SettingsAdvisor(ctx, self.ai)
         # Echtzeit-Kurse (Helius) + Benachrichtigung der Web-Oberfläche
         self.feed: PoolPriceFeed | None = None
         self.live: dict[str, tuple[float, float]] = {}      # mint -> (Preis, Zeitpunkt)
