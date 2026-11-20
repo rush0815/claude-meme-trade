@@ -60,7 +60,8 @@ function renderSummary(s) {
   $("modeBadge").textContent = s.sim ? "SIMULATION" : s.mode.toUpperCase();
   $("modeBadge").className = "badge " + s.mode;
   $("statusLine").textContent = (s.killed ? "NOT-AUS aktiv · " : s.paused ? "pausiert · " : "") +
-    `${s.status} · letzter Zyklus vor ${s.last_cycle ? ago(s.last_cycle) : "–"} · Watchlist ${s.watchlist}${s.watch_oldest_s != null ? " (Durchlauf " + Math.round(s.watch_oldest_s) + " s)" : ""}` +
+    `${s.status} (aktiv vor ${s.last_cycle ? ago(s.last_cycle) : "–"}) · Watchlist ${s.watchlist} Coins` +
+    (s.watch_oldest_s != null ? `, max. ${Math.round(s.watch_oldest_s)} s alt` : "") +
     (wsLive ? " · ⚡ Live" : "");
   const st = s.stats;
   $("kpis").innerHTML =
@@ -301,6 +302,8 @@ function renderDataInfo() {
     <div>Watchlist</div><div>DexScreener, jeder Kandidat alle 30 s</div>
     <div>Neue Kandidaten</div><div>Graduations live (Helius + PumpPortal), GeckoTerminal/DexScreener-Listen jede Minute</div>
     <div>Phasen- & Sicherheitscheck</div><div>GeckoTerminal-Kerzen und RugCheck, nur direkt vor einem Kauf</div>
+    <div>Statuszeile oben</div><div>„aktiv vor X s“ = wann der Bot zuletzt eine Runde beendet hat (sollte nur wenige Sekunden sein, sonst hängt er).
+      „Watchlist N Coins, max. Y s alt“ = so alt sind die Daten des am längsten nicht geprüften Coins (Takt ~30 s)</div>
     <div>Diese Oberfläche</div><div>${wsLive ? "⚡ Live-Push vom Bot (WebSocket), bis zu 4×/s" : "Abfrage alle 2 s (Live-Verbindung nicht aktiv)"};
       Kapitalverlauf: Punkt pro Minute + Live-Punkt</div>`;
 }
