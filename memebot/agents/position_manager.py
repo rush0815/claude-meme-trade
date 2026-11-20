@@ -52,15 +52,16 @@ class PositionManager(Agent):
             return "Liquidität eingebrochen", 1.0
         if pnl <= -e.stop_loss_pct:
             return "Stop-Loss", 1.0
+        # Stop-Loss nachziehen (Break-even): gilt in beiden Ausstiegs-Modi
+        be_on = float(e.get("breakeven_activate_pct", 0) or 0)
+        if be_on > 0 and (high / entry - 1) * 100 >= be_on and pnl <= float(e.get("breakeven_floor_pct", 3)):
+            return "Break-even-Stop", 1.0
         if e.get("mode", "ladder") == "simple":
             if pnl >= float(e.get("simple_take_profit_pct", 30)):
                 return f"Take-Profit (+{float(e.get('simple_take_profit_pct', 30)):g}%)", 1.0
             if now - p["opened_at"] > e.max_hold_min * 60:
                 return "Zeitlimit", 1.0
             return None
-        be_on = float(e.get("breakeven_activate_pct", 0) or 0)
-        if be_on > 0 and (high / entry - 1) * 100 >= be_on and pnl <= float(e.get("breakeven_floor_pct", 3)):
-            return "Break-even-Stop", 1.0
         levels = e.take_profit_levels
         hits = int(p["tp_hits"] or 0)
         if hits < len(levels) and pnl >= levels[hits][0]:

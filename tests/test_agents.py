@@ -232,12 +232,24 @@ def test_default_exit_ladder_is_consistent(ctx):
 
 
 def test_simple_exit_mode(ctx):
-    ctx.cfg["exit"].update(mode="simple", simple_take_profit_pct=25, breakeven_activate_pct=25)
+    ctx.cfg["exit"].update(mode="simple", simple_take_profit_pct=25, breakeven_activate_pct=0)
     pm, pid = open_pos(ctx)
     entry = ctx.db.position(pid)["entry_price"]
     run(pm.tick({"M1": good_market(price_sol=entry * 1.20)}))    # +20 %: noch nichts
-    run(pm.tick({"M1": good_market(price_sol=entry * 1.05)}))    # zurück: kein Break-even im Einfach-Modus
+    run(pm.tick({"M1": good_market(price_sol=entry * 1.05)}))    # zurück: SL-Nachziehen ist aus
     assert ctx.db.position(pid)["status"] == "open"
     run(pm.tick({"M1": good_market(price_sol=entry * 1.26)}))
     p = ctx.db.position(pid)
     assert p["status"] == "closed" and p["exit_reason"].startswith("Take-Profit") and p["tokens_remaining"] == 0
+
+
+def test_simple_mode_with_sl_moved_above_entry(ctx):
+    ctx.cfg["exit"].update(mode="simple", simple_take_profit_pct=50, breakeven_activate_pct=15, breakeven_floor_pct=2)
+    pm, pid = open_pos(ctx)
+    entry = ctx.db.position(pid)["entry_price"]
+    run(pm.tick({"M1": good_market(price_sol=entry * 1.18)}))    # +18 %: SL wird auf Entry +2 % gezogen
+    run(pm.tick({"M1": good_market(price_sol=entry * 1.05)}))    # +5 %: noch darüber
+    assert ctx.db.position(pid)["status"] == "open"
+    run(pm.tick({"M1": good_market(price_sol=entry * 1.015)}))   # +1,5 %: unter neuem SL
+    p = ctx.db.position(pid)
+    assert p["status"] == "closed" and p["exit_reason"] == "Break-even-Stop"
