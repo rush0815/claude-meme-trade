@@ -171,7 +171,13 @@ class AIAnalyst(Agent):
                     "messages": messages}
             if tools:
                 body["tools"] = tools
+            if cfg.get("temperature") is not None:
+                body["temperature"] = cfg["temperature"]
             r = await self.client.post(API_URL, headers=headers, json=body)
+            if r.status_code == 400 and "temperature" in r.text and "temperature" in body:
+                cfg = {**cfg, "temperature": None}               # Modell erlaubt keine Temperatur -> ohne
+                body.pop("temperature")
+                r = await self.client.post(API_URL, headers=headers, json=body)
             if r.status_code >= 400:
                 raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
             data = r.json()

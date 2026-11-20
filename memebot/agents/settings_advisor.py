@@ -81,7 +81,8 @@ class SettingsAdvisor(Agent):
         n = len(self.closed())
         if n < self.min_trades() and not force:
             raise ValueError(f"erst {n} abgeschlossene Trades – Vorschläge ab {self.min_trades()}")
-        cfg = {**ai_settings(self.db), "model": model, "max_tokens": 2500}
+        # Temperatur 0: gleiche Daten -> möglichst gleicher Vorschlag
+        cfg = {**ai_settings(self.db), "model": model, "max_tokens": 2500, "temperature": 0}
         if not cfg["api_key"]:
             raise ValueError("kein Anthropic-API-Key gesetzt (Reiter KI-Analyst)")
         data = self.gather(analyst)
@@ -146,12 +147,26 @@ class SettingsAdvisor(Agent):
         overrides.save(self.cfg, self.db, {c["key"]: c["value"] for c in chosen})
         applied = [{"key": c["key"], "label": c["label"], "label_en": c.get("label_en"), "old": before.get(c["key"]),
                     "new": c["value"]} for c in chosen]
-        prev = json.loads(run["applied"] or "[]")
-        self.db.x("UPDATE advisor_runs SET applied=?, applied_at=COALESCE(applied_at, ?) WHERE id=?",
-                  (json.dumps(prev + applied), time.time(), run_id))
+        prev = [a for a in json.loads(run["applied"] or "[]") if a["key"] not in keys]
+        self.db.x("UPDATE advisor_runs SET applied=?, applied_at=?, reverted=NULL, reverted_at=NULL WHERE id=?",
+                  (json.dumps(prev + applied), run["applied_at"] if prev else time.time(), run_id))
         self.log(f"Einstellungs-Vorschlag #{run_id} übernommen: " +
                  ", ".join(f"{a['label']} {a['old']} → {a['new']}" for a in applied))
         return {"ok": True, "applied": applied}
+
+    def revert(self, run_id: int) -> dict:
+        """Übernommene Änderungen eines Vorschlags rückgängig machen (alte Werte wiederherstellen)."""
+        run = self.db.one("SELECT * FROM advisor_runs WHERE id=?", (run_id,))
+        applied = json.loads((run or {}).get("applied") or "[]")
+        if not run or not applied or run.get("reverted_at"):
+            raise ValueError("nichts zum Rückgängigmachen")
+        now = overrides.current(self.cfg)
+        overrides.save(self.cfg, self.db, {a["key"]: a["old"] for a in applied})
+        reverted = [{**a, "was": now.get(a["key"])} for a in applied]
+        self.db.x("UPDATE advisor_runs SET reverted=?, reverted_at=? WHERE id=?", (json.dumps(reverted), time.time(), run_id))
+        self.log(f"Einstellungs-Vorschlag #{run_id} rückgängig gemacht: " +
+                 ", ".join(f"{a['label']} {a['new']} → {a['old']}" for a in applied))
+        return {"ok": True, "reverted": reverted}
 
     def history(self) -> list[dict[str, Any]]:
         runs = self.db.q("SELECT * FROM advisor_runs ORDER BY id DESC LIMIT 30")
@@ -161,10 +176,12 @@ class SettingsAdvisor(Agent):
             item = {"id": r["id"], "ts": r["ts"], "model": r["model"], "trades": r["trades"], "cost_usd": r["cost_usd"],
                     "confidence": res.get("confidence"), "summary_de": res.get("summary_de"),
                     "summary_en": res.get("summary_en"), "changes": res.get("changes", []),
-                    "applied": json.loads(r["applied"] or "[]"), "applied_at": r["applied_at"]}
+                    "applied": json.loads(r["applied"] or "[]"), "applied_at": r["applied_at"],
+                    "reverted_at": r.get("reverted_at"), "watch_de": res.get("watch_de"), "watch_en": res.get("watch_en"),
+                    "low_data": res.get("low_data", False)}
             if r["applied_at"]:
-                # Vorher: gleich viele Trades vor der Übernahme (max. 50) – nachher: alles seitdem
-                after = self.closed(since=r["applied_at"])
+                # Vorher: Trades vor der Übernahme (max. 50) – nachher: bis heute bzw. bis zum Rückgängigmachen
+                after = self.closed(since=r["applied_at"], until=r.get("reverted_at"))
                 before = self.closed(until=r["applied_at"])[-max(len(after), 20):][-50:]
                 item["before"], item["after"] = _kpis(before), _kpis(after)
             out.append(item)

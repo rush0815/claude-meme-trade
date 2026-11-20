@@ -117,7 +117,9 @@ CREATE TABLE IF NOT EXISTS advisor_runs (
     response TEXT,                                -- Vorschlag (JSON)
     applied TEXT,                                 -- übernommene Änderungen (JSON)
     applied_at REAL,
-    cost_usd REAL
+    cost_usd REAL,
+    reverted TEXT,
+    reverted_at REAL
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -149,6 +151,10 @@ class DB:
             self.conn.execute("ALTER TABLE fills ADD COLUMN market_price REAL")
         if "mcap_usd" not in fcols:
             self.conn.execute("ALTER TABLE fills ADD COLUMN mcap_usd REAL")
+        acols = {r[1] for r in self.conn.execute("PRAGMA table_info(advisor_runs)")}
+        for col, typ in (("reverted", "TEXT"), ("reverted_at", "REAL")):
+            if col not in acols:
+                self.conn.execute(f"ALTER TABLE advisor_runs ADD COLUMN {col} {typ}")
         pcols = {r[1] for r in self.conn.execute("PRAGMA table_info(positions)")}
         for col in ("supply", "entry_mcap"):
             if col not in pcols:

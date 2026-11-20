@@ -439,6 +439,15 @@ def create_app(bot: "Bot") -> FastAPI:
         stats_cache["t"] = 0
         return res
 
+    @app.post("/api/advisor/{rid}/revert")
+    def advisor_revert(rid: int, _: None = Depends(auth)):
+        try:
+            res = bot.advisor.revert(rid)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        stats_cache["t"] = 0
+        return res
+
     @app.post("/api/control/{action}")
     def control(action: str, _: None = Depends(auth)):
         if action == "pause":
