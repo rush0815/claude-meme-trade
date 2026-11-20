@@ -1,0 +1,82 @@
+# Meme-Trade-Bot – Konfiguration
+# Kopiere diese Datei nach config.toml und passe sie an.
+# Werte in ${...} werden aus Umgebungsvariablen gelesen (z. B. /etc/memebot.env).
+
+# "paper" = Spielgeld mit echten Kursen, "live" = echte Trades
+mode = "paper"
+paper_start_sol = 1.0
+poll_seconds = 15
+db_path = "data/memebot.db"
+
+[api]
+# Helius (oder anderer RPC). Free reicht für Paper, für Live Developer-Plan empfohlen.
+rpc_url = "https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}"
+jupiter_base = "https://api.jup.ag/swap/v1"
+jupiter_api_key = "${JUPITER_API_KEY}"     # leer = keyless (sehr langsam)
+jupiter_min_interval_s = 1.1                # Free-Plan: 1 Anfrage/Sekunde
+dexscreener_base = "https://api.dexscreener.com"
+rugcheck_base = "https://api.rugcheck.xyz/v1"
+pumpportal_ws = "wss://pumpportal.fun/api/data"
+
+[scout]
+use_pumpportal = true           # Graduations von pump.fun live mitlesen
+use_dexscreener_lists = true    # neue Profile + Boosts von DexScreener
+min_age_min = 15                # ganz frische Launches meiden (Sniper/Rugs)
+max_age_min = 1440
+recheck_seconds = 60            # Kandidat erneut prüfen, wenn er noch nicht reif war
+max_watchlist = 400
+
+[filters]
+min_liquidity_usd = 20000
+max_liquidity_usd = 750000
+max_fdv_usd = 8000000
+min_volume_h1_usd = 25000
+min_txns_m5 = 20
+
+[security]
+max_rugcheck_score = 2000        # RugCheck "score" (höher = riskanter)
+require_mint_revoked = true
+require_freeze_revoked = true
+min_lp_locked_pct = 80           # Liquidität gelockt oder verbrannt
+max_top10_holder_pct = 35        # ohne Pools
+max_single_holder_pct = 12
+reject_risk_levels = ["danger"]
+max_sell_impact_pct = 8          # Verkaufstest über Jupiter
+
+[strategy]
+min_score = 65                   # 0–100
+max_change_m5_pct = 35           # oberhalb: FOMO-Spitze, nicht kaufen
+min_change_m5_pct = 1.5
+min_buy_sell_ratio_m5 = 1.25
+
+[risk]
+position_pct = 0.03              # Anteil vom Kapital pro Trade
+min_position_sol = 0.01
+max_position_sol = 0.5
+max_open_positions = 4
+max_daily_loss_pct = 0.10        # danach keine neuen Käufe bis Mitternacht (UTC)
+max_drawdown_pct = 0.30          # vom Höchststand -> automatischer Not-Aus
+sol_reserve = 0.03               # für Gebühren stehen lassen
+cooldown_hours = 12              # gleichen Coin nicht direkt wieder kaufen
+
+[exit]
+stop_loss_pct = 20
+# [Gewinn in %, Anteil der ursprünglichen Menge]
+take_profit_levels = [[40, 0.33], [100, 0.33]]
+trailing_activate_pct = 30
+trailing_stop_pct = 18
+max_hold_min = 180
+liquidity_drop_factor = 0.6      # Liquidität < 60 % vom Einstieg -> raus
+
+[execution]
+slippage_bps = 1000              # 10 %; Meme-Coins schwanken stark
+max_buy_impact_pct = 3
+priority_fee_lamports = 200000   # max. Priority Fee pro Transaktion
+paper_extra_slippage_pct = 1.0   # Paper-Modus: zusätzlicher Abschlag, damit er nicht zu optimistisch ist
+confirm_timeout_s = 60
+
+[web]
+host = "0.0.0.0"
+port = 8080
+user = "${WEB_USER}"
+password = "${WEB_PASSWORD}"

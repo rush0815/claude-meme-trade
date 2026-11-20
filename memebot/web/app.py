@@ -1,0 +1,149 @@
+"""Web-Oberfläche: JSON-API + statisches Frontend."""
+from __future__ import annotations
+
+import json
+import secrets
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.responses import FileResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.staticfiles import StaticFiles
+
+if TYPE_CHECKING:
+    from ..orchestrator import Bot
+
+STATIC = Path(__file__).parent / "static"
+
+
+def create_app(bot: "Bot") -> FastAPI:
+    app = FastAPI(title="claude-meme-trade", docs_url=None, redoc_url=None)
+    security = HTTPBasic(auto_error=False)
+    user = bot.cfg.web.user or ""
+    pw = bot.cfg.web.password or ""
+    db = bot.db
+
+    def auth(cred: HTTPBasicCredentials | None = Depends(security)) -> None:
+        if not pw:  # kein Passwort gesetzt -> offen (nur im eigenen Netz/VPN!)
+            return
+        ok = cred is not None and secrets.compare_digest(cred.username, user) and \
+            secrets.compare_digest(cred.password, pw)
+        if not ok:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"})
+
+    def mode() -> str:
+        return bot.ctx.mode
+
+    def enrich(p: dict) -> dict:
+        p = dict(p)
+        for k in ("score_details", "security"):
+            try:
+                p[k] = json.loads(p[k]) if p.get(k) else {}
+            except ValueError:
+                p[k] = {}
+        if p["status"] == "open":
+            price = p.get("last_price") or p["entry_price"]
+            value = p["tokens_remaining"] * price
+            p["value_sol"] = value
+            p["unrealized_sol"] = value + (p["sol_received"] or 0) - p["size_sol"]
+            p["unrealized_pct"] = p["unrealized_sol"] / p["size_sol"] * 100 if p["size_sol"] else 0
+        return p
+
+    @app.get("/", include_in_schema=False)
+    def index(_: None = Depends(auth)):
+        return FileResponse(STATIC / "index.html")
+
+    @app.get("/api/summary")
+    async def summary(_: None = Depends(auth)):
+        equity, cash = await bot.portfolio.equity()
+        st = bot.analyst.stats()
+        open_pos = [enrich(p) for p in db.open_positions(mode())]
+        start = float(bot.cfg.paper_start_sol) if mode() == "paper" else None
+        first = db.one("SELECT equity_sol FROM equity ORDER BY ts LIMIT 1")
+        base = start or (first["equity_sol"] if first else equity)
+        return {
+            "mode": mode(), "sim": bool(bot.cfg.get("_sim")), "status": bot.status, "wallet": bot.wallet,
+            "paused": bool(db.get("paused", False)), "killed": bool(db.get("killed", False)),
+            "last_cycle": bot.last_cycle_ts, "now": time.time(),
+            "equity_sol": equity, "cash_sol": cash, "start_sol": base,
+            "total_return_pct": (equity / base - 1) * 100 if base else 0,
+            "unrealized_sol": sum(p["unrealized_sol"] for p in open_pos),
+            "open_count": len(open_pos),
+            "watchlist": db.one("SELECT COUNT(*) AS n FROM candidates WHERE status IN ('new','waiting')")["n"],
+            "stats": st["gesamt"], "last24h": st["letzte_24h"],
+        }
+
+    @app.get("/api/positions")
+    def positions(state: str = "open", limit: int = 200, _: None = Depends(auth)):
+        if state == "open":
+            rows = db.open_positions(mode())
+        else:
+            rows = db.q("SELECT * FROM positions WHERE mode=? AND status='closed' ORDER BY closed_at DESC LIMIT ?",
+                        (mode(), min(limit, 2000)))
+        return [enrich(r) for r in rows]
+
+    @app.get("/api/positions/{pid}")
+    def position(pid: int, _: None = Depends(auth)):
+        p = db.position(pid)
+        if not p:
+            raise HTTPException(404)
+        p = enrich(p)
+        p["fills"] = db.q("SELECT * FROM fills WHERE position_id=? ORDER BY ts", (pid,))
+        return p
+
+    @app.post("/api/positions/{pid}/close")
+    def close_position(pid: int, _: None = Depends(auth)):
+        p = db.position(pid)
+        if not p or p["status"] != "open":
+            raise HTTPException(404)
+        db.update_position(pid, force_close=1)
+        db.log("Web-UI", f"Manuelles Schließen angefordert: {p['symbol']}", mint=p["mint"])
+        return {"ok": True}
+
+    @app.get("/api/equity")
+    def equity(hours: float = 168, _: None = Depends(auth)):
+        return db.q("SELECT ts, equity_sol, cash_sol FROM equity WHERE ts>=? ORDER BY ts",
+                    (time.time() - hours * 3600,))
+
+    @app.get("/api/events")
+    def events(limit: int = 200, agent: str | None = None, _: None = Depends(auth)):
+        if agent:
+            return db.q("SELECT * FROM events WHERE agent=? ORDER BY id DESC LIMIT ?", (agent, min(limit, 2000)))
+        return db.q("SELECT * FROM events ORDER BY id DESC LIMIT ?", (min(limit, 2000),))
+
+    @app.get("/api/candidates")
+    def candidates(limit: int = 100, _: None = Depends(auth)):
+        return db.q("SELECT * FROM candidates ORDER BY COALESCE(last_checked, first_seen) DESC LIMIT ?",
+                    (min(limit, 1000),))
+
+    @app.get("/api/analysis")
+    def analysis(_: None = Depends(auth)):
+        return bot.analyst.stats()
+
+    @app.get("/api/config")
+    def config(_: None = Depends(auth)):
+        hide = {"api", "web"}
+        return {k: v for k, v in bot.cfg.items() if k not in hide and not k.startswith("_")}
+
+    @app.post("/api/control/{action}")
+    def control(action: str, _: None = Depends(auth)):
+        if action == "pause":
+            db.set("paused", True)
+        elif action == "resume":
+            db.set("paused", False)
+            db.set("killed", False)
+        elif action == "kill":
+            db.set("killed", True)
+            for p in db.open_positions(mode()):
+                db.update_position(p["id"], force_close=1)
+        elif action == "reset-peak":
+            db.set(f"peak_{mode()}", None)
+        else:
+            raise HTTPException(400, "unbekannte Aktion")
+        db.log("Web-UI", f"Steuerung: {action}", "warn" if action == "kill" else "info")
+        return {"ok": True}
+
+    app.mount("/static", StaticFiles(directory=STATIC), name="static")
+    return app

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1116">
+<title>Meme-Trade-Bot</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="dot" id="statusDot"></span>
+    <strong>Meme-Trade-Bot</strong>
+    <span class="badge" id="modeBadge">–</span>
+  </div>
+  <div class="sub" id="statusLine">verbinde…</div>
+</header>
+
+<nav id="tabs">
+  <button data-tab="overview" class="active">Übersicht</button>
+  <button data-tab="trades">Trades</button>
+  <button data-tab="agents">Agenten</button>
+  <button data-tab="analysis">Analyse</button>
+  <button data-tab="control">Steuerung</button>
+</nav>
+
+<main>
+  <section id="overview" class="tab active">
+    <div class="kpis" id="kpis"></div>
+    <div class="card">
+      <div class="card-head"><h2>Kapitalverlauf</h2>
+        <div class="seg" id="rangeSeg">
+          <button data-h="24">24h</button><button data-h="168" class="active">7T</button><button data-h="720">30T</button>
+        </div>
+      </div>
+      <canvas id="equityChart" height="200"></canvas>
+    </div>
+    <div class="card">
+      <h2>Offene Positionen</h2>
+      <div id="openList" class="list"></div>
+    </div>
+  </section>
+
+  <section id="trades" class="tab">
+    <div class="card">
+      <h2>Abgeschlossene Trades</h2>
+      <div id="tradeList" class="list"></div>
+    </div>
+  </section>
+
+  <section id="agents" class="tab">
+    <div class="card">
+      <h2>Watchlist &amp; Entscheidungen</h2>
+      <div class="scroll"><table id="candTable"></table></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Agenten-Log</h2>
+        <select id="agentFilter">
+          <option value="">alle</option><option>Scout</option><option>Stratege</option><option>Rug-Analyst</option>
+          <option>Risk-Manager</option><option>Position-Manager</option><option>Orchestrator</option><option>Web-UI</option>
+        </select>
+      </div>
+      <div id="eventLog" class="log"></div>
+    </div>
+  </section>
+
+  <section id="analysis" class="tab">
+    <div class="card"><h2>Vorschläge des Analysten</h2><ul id="tips"></ul></div>
+    <div class="card"><h2>Nach Ausstiegsgrund</h2><div class="scroll"><table id="byExit"></table></div></div>
+    <div class="card"><h2>Nach Einstiegs-Score</h2><div class="scroll"><table id="byScore"></table></div></div>
+  </section>
+
+  <section id="control" class="tab">
+    <div class="card">
+      <h2>Steuerung</h2>
+      <div class="buttons">
+        <button class="btn" data-act="pause">Pausieren (keine neuen Käufe)</button>
+        <button class="btn" data-act="resume">Fortsetzen / Not-Aus lösen</button>
+        <button class="btn danger" data-act="kill">NOT-AUS: alles verkaufen &amp; stoppen</button>
+      </div>
+      <p class="hint">Pausieren lässt offene Positionen weiterlaufen (Stop-Loss etc. bleiben aktiv).</p>
+    </div>
+    <div class="card"><h2>Aktive Konfiguration</h2><pre id="cfg"></pre></div>
+  </section>
+</main>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-body">
+    <button class="close" id="modalClose">×</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
