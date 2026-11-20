@@ -162,3 +162,16 @@ def test_chart_timeframes_and_supply_backfill(tmp_path):
     assert abs(p["supply"] - 1e9) < 1 and p["entry_mcap"] > 0            # nachgerüstet und gespeichert
     det = c.get(f"/api/positions/{pid}").json()
     assert det["score_details"]["ki_hinweis"] == "KI aus" and det["fills"][0]["mcap_usd"] > 0
+
+
+def test_trade_times_endpoint(tmp_path):
+    import time as _t
+    bot = make_bot(tmp_path)
+    for i, (age_d, pnl) in enumerate([(0.1, 0.01), (2, -0.02), (40, 0.05)]):
+        bot.db.insert_position(mode="paper", mint=f"T{i}", status="closed", opened_at=_t.time() - age_d * 86400,
+                               closed_at=_t.time() - age_d * 86400 + 600, size_sol=0.1, tokens_total=1,
+                               tokens_remaining=0, entry_price=1, pnl_sol=pnl)
+    c = TestClient(create_app(bot))
+    rows = c.get("/api/trade-times?days=31").json()
+    assert len(rows) == 2 and all("opened_at" in r and "pnl_sol" in r for r in rows)   # 40 Tage alt fällt raus
+    assert len(c.get("/api/trade-times?days=500").json()) == 2                          # max. 31 Tage

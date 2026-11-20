@@ -326,6 +326,13 @@ def create_app(bot: "Bot") -> FastAPI:
         return {"stunden": hours, "kandidaten": len(rows), "gruende": out, "score_verteilung": buckets,
                 "min_score": bot.cfg.strategy.min_score}
 
+    @app.get("/api/trade-times")
+    def trade_times(days: int = 31, _: None = Depends(auth)):
+        """Einstiegszeiten der Trades (max. 31 Tage) – Auswertung nach Wochentag/Stunde im Browser (Ortszeit)."""
+        days = max(1, min(int(days), 31))
+        return db.q("SELECT opened_at, closed_at, status, pnl_sol FROM positions WHERE mode=? AND opened_at>=?"
+                    " ORDER BY opened_at", (mode(), time.time() - days * 86400 - 86400))
+
     @app.get("/api/analysis")
     def analysis(_: None = Depends(auth)):
         return bot.analyst.stats()

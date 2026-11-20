@@ -30,7 +30,9 @@ const UI_EN = {
   "Sprache der Oberfläche. Wird in diesem Browser gespeichert.": "Interface language. Stored in this browser.",
   "KI-Analyst": "AI analyst", "Verbindung testen": "Test connection", "Token-Verbrauch": "Token usage",
   "Letzte KI-Aufrufe": "Recent AI calls", "Nach KI-Score": "By AI score",
-  "Alle Aufrufe anzeigen": "Show all calls", "Als CSV herunterladen": "Download as CSV",
+  "Alle Aufrufe anzeigen": "Show all calls", "Trades pro Wochentag": "Trades per weekday",
+  "Trades pro Tageszeit": "Trades per hour of day", "diese Woche": "this week", "2 Wochen": "2 weeks",
+  "3 Wochen": "3 weeks", "Tage": "days", "Als CSV herunterladen": "Download as CSV",
 };
 const t = (s) => (LANG === "en" ? (UI_EN[s] ?? s) : s);
 

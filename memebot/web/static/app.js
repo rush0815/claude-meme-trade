@@ -432,7 +432,55 @@ function aggTable(obj, first) {
       : `<tr><td colspan="6" class="muted">${L("keine Daten", "no data")}</td></tr>`);
 }
 
+// ---------------------------------------------------------------- Zeit-Auswertung (Ortszeit des Browsers)
+let wdWeeks = 1;
+document.querySelectorAll("#wdSeg button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("#wdSeg button").forEach((x) => x.classList.toggle("active", x === b));
+  wdWeeks = +b.dataset.w; loadTimeAnalysis();
+});
+$("hourDays").onchange = () => loadTimeAnalysis();
+
+function timeRows(groups, labels) {
+  const maxN = Math.max(1, ...groups.map((g) => g.n));
+  return `<tr><th></th><th></th><th class="num">Trades</th><th class="num">${L("Gew.", "Wins")}</th><th class="num">PnL SOL</th></tr>` +
+    groups.map((g, i) => `<tr><td style="width:44px">${labels[i]}</td>
+      <td style="min-width:90px"><div class="bar" style="height:10px"><i style="width:${g.n / maxN * 100}%"></i></div></td>
+      <td class="num">${g.n || "–"}</td><td class="num">${g.closed ? Math.round(g.wins / g.closed * 100) + "%" : "–"}</td>
+      <td class="num ${cls(g.pnl)}">${g.closed ? sol(g.pnl) : "–"}</td></tr>`).join("");
+}
+
+function bucket(rows, keyFn, size) {
+  const g = Array.from({ length: size }, () => ({ n: 0, closed: 0, wins: 0, pnl: 0 }));
+  for (const r of rows) {
+    const b = g[keyFn(new Date(r.opened_at * 1000))];
+    b.n++;
+    if (r.status === "closed") { b.closed++; b.pnl += r.pnl_sol || 0; if ((r.pnl_sol || 0) > 0) b.wins++; }
+  }
+  return g;
+}
+
+async function loadTimeAnalysis() {
+  const days = Math.max(1, Math.min(31, +$("hourDays").value || 7));
+  $("hourDays").value = days;
+  const rows = await api("/api/trade-times?days=31");
+  // Wochentage: Woche beginnt Montag 00:00 Ortszeit; 2/3 Wochen = diese + vorige Woche(n)
+  const now = new Date(), monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  const wdStart = monday.getTime() / 1000 - (wdWeeks - 1) * 7 * 86400;
+  const wdRows = rows.filter((r) => r.opened_at >= wdStart);
+  const names = LANG === "en" ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] : ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+  $("byWeekday").innerHTML = timeRows(bucket(wdRows, (d) => (d.getDay() + 6) % 7, 7), names);
+  $("wdInfo").textContent = L(`${wdRows.length} Trades seit ${new Date(wdStart * 1000).toLocaleDateString(LOCALE())} (Einstiegszeit, summiert je Wochentag)`,
+    `${wdRows.length} trades since ${new Date(wdStart * 1000).toLocaleDateString(LOCALE())} (entry time, summed per weekday)`);
+  const hStart = Date.now() / 1000 - days * 86400;
+  const hRows = rows.filter((r) => r.opened_at >= hStart);
+  $("byHour").innerHTML = timeRows(bucket(hRows, (d) => d.getHours(), 24),
+    Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0") + ":00"));
+  $("hourInfo").textContent = L(`${hRows.length} Trades der letzten ${days} Tage nach Einstiegsstunde (Ortszeit). „Gew.“ und PnL nur abgeschlossene Trades.`,
+    `${hRows.length} trades of the last ${days} days by entry hour (local time). Wins and PnL for closed trades only.`);
+}
+
 async function loadAnalysis() {
+  loadTimeAnalysis();
   const [a, f] = await Promise.all([api("/api/analysis"), api("/api/funnel")]);
   $("funnelInfo").textContent = L(`${f.kandidaten} Coins geprüft. Letzte Entscheidung je Coin, Kaufschwelle Score ${f.min_score}.`,
     `${f.kandidaten} coins checked. Latest decision per coin, buy threshold score ${f.min_score}.`);

@@ -82,6 +82,26 @@
       <h2 style="margin-top:14px" data-i18n="Score-Verteilung">Score-Verteilung</h2>
       <div class="scroll"><table id="scoreDist"></table></div>
     </div>
+    <div class="card">
+      <div class="card-head"><h2 data-i18n="Trades pro Wochentag">Trades pro Wochentag</h2>
+        <div class="seg" id="wdSeg">
+          <button data-w="1" class="active" data-i18n="diese Woche">diese Woche</button>
+          <button data-w="2" data-i18n="2 Wochen">2 Wochen</button>
+          <button data-w="3" data-i18n="3 Wochen">3 Wochen</button>
+        </div>
+      </div>
+      <p class="hint" id="wdInfo"></p>
+      <div class="scroll"><table id="byWeekday"></table></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2 data-i18n="Trades pro Tageszeit">Trades pro Tageszeit</h2>
+        <div class="seg"><input id="hourDays" type="number" min="1" max="31" value="7" inputmode="numeric"
+          style="width:56px;background:transparent;color:var(--text);border:0;text-align:right;font-size:13px">
+          <span style="font-size:12px;color:var(--muted);padding:4px 6px 0 2px" data-i18n="Tage">Tage</span></div>
+      </div>
+      <p class="hint" id="hourInfo"></p>
+      <div class="scroll"><table id="byHour"></table></div>
+    </div>
     <div class="card"><h2 data-i18n="Vorschläge des Analysten">Vorschläge des Analysten</h2><ul id="tips"></ul></div>
     <div class="card"><h2 data-i18n="Nach Ausstiegsgrund">Nach Ausstiegsgrund</h2><div class="scroll"><table id="byExit"></table></div></div>
     <div class="card"><h2 data-i18n="Nach Einstiegs-Score">Nach Einstiegs-Score</h2><div class="scroll"><table id="byScore"></table></div></div>
