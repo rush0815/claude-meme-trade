@@ -239,6 +239,38 @@ def create_app(bot: "Bot") -> FastAPI:
         stats_cache["t"] = 0
         return new
 
+    # ------------------------------------------------------------ KI-Analyst
+    @app.get("/api/ai")
+    def ai_get(_: None = Depends(auth)):
+        from ..agents.ai_analyst import CHECKS, MODELS, mask, settings
+        cfg = settings(db)
+        from_env = bool(cfg["api_key"]) and not (db.get("ai") or {}).get("api_key")
+        return {
+            "settings": {**{k: v for k, v in cfg.items() if k != "api_key"}, "api_key_masked": mask(cfg["api_key"]),
+                         "api_key_from_env": from_env},
+            "checks": {k: {"de": v[0], "en": v[1]} for k, v in CHECKS.items()},
+            "models": MODELS,
+            "usage": bot.ai.usage(),
+        }
+
+    @app.post("/api/ai")
+    def ai_set(values: dict = Body(...), _: None = Depends(auth)):
+        from ..agents.ai_analyst import save_settings
+        try:
+            save_settings(db, values)
+        except (ValueError, TypeError) as e:
+            raise HTTPException(400, str(e)) from None
+        changed = [k for k in values if k != "api_key"] + (["api_key"] if values.get("api_key") else [])
+        db.log("Web-UI", "KI-Einstellungen geändert: " + ", ".join(changed))
+        return ai_get()
+
+    @app.post("/api/ai/test")
+    async def ai_test(_: None = Depends(auth)):
+        try:
+            return await bot.ai.test()
+        except Exception as e:
+            raise HTTPException(400, f"Test fehlgeschlagen: {e}") from None
+
     @app.post("/api/control/{action}")
     def control(action: str, _: None = Depends(auth)):
         if action == "pause":

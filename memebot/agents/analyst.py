@@ -1,6 +1,7 @@
 """Analyst: wertet abgeschlossene Trades aus und schlägt Einstellungen vor (wendet nichts automatisch an)."""
 from __future__ import annotations
 
+import json
 import time
 
 from .base import Agent
@@ -45,6 +46,15 @@ class Analyst(Agent):
         out["nach_ausstieg"] = {k: _agg(v) for k, v in sorted(reasons.items())}
         out["nach_score"] = {f"{lo}–{min(hi, 100)}": _agg([r for r in closed if lo <= (r["score"] or 0) < hi])
                              for lo, hi in BUCKETS}
+        def ki(r):
+            try:
+                return json.loads(r["score_details"] or "{}").get("ki_score")
+            except ValueError:
+                return None
+        ki_buckets = {"ohne KI": [r for r in closed if ki(r) is None]}
+        for lo, hi in ((0, 40), (40, 60), (60, 80), (80, 101)):
+            ki_buckets[f"KI {lo}–{min(hi, 100)}"] = [r for r in closed if ki(r) is not None and lo <= ki(r) < hi]
+        out["nach_ki_score"] = {k: _agg(v) for k, v in ki_buckets.items()}
         eq = self.db.q("SELECT equity_sol FROM equity ORDER BY ts")
         peak, mdd = 0.0, 0.0
         for row in eq:

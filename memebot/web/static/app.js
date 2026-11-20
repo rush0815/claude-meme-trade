@@ -53,6 +53,7 @@ $("langSelect").onchange = () => {
   setLang($("langSelect").value);
   applyStaticLang();
   settingsLoaded = false;
+  aiLoaded = false;
   refresh();
 };
 applyStaticLang();
@@ -201,6 +202,16 @@ function scoreBlock(sd) {
     </div>`;
 }
 
+function aiBlock(sd) {
+  if (sd.ki_score == null) return "";
+  const flags = (sd.ki_red_flags || []).map((f) => `<li>${esc(f)}</li>`).join("");
+  return `<h2>${L("KI-Analyst", "AI analyst")} <span class="muted">(${sd.ki_modus === "filter" ? L("Filter", "filter") : L("nur beobachten", "observe only")})</span></h2>
+    <div class="kv">
+      <div>${L("KI-Score", "AI score")}</div><div>${sd.ki_score}<div class="bar"><i style="width:${sd.ki_score}%"></i></div></div>
+      <div>${L("Urteil", "Verdict")}</div><div>${esc(L(sd.ki_urteil_de, sd.ki_urteil_en || sd.ki_urteil_de))}</div>
+    </div>${flags ? `<p class="hint">${L("Warnsignale", "Red flags")}:</p><ul>${flags}</ul>` : ""}`;
+}
+
 async function showPosition(id) {
   const p = await api("/api/positions/" + id);
   const open = p.status === "open";
@@ -236,6 +247,7 @@ async function showPosition(id) {
     </div>
     <h2>${L("Warum gekauft (Stratege)", "Why it was bought (strategist)")}</h2>
     ${scoreBlock(sd)}
+    ${aiBlock(sd)}
     <h2>${L("Sicherheit (Rug-Analyst)", "Security (rug analyst)")}</h2>
     <div class="kv">
       <div>${L("RugCheck-Score", "RugCheck score")}</div><div>${sec.score ?? "–"}</div>
@@ -293,7 +305,8 @@ function showCandidate(c) {
         <a href="https://rugcheck.xyz/tokens/${esc(c.mint)}" target="_blank">RugCheck</a></div>
     </div>
     <h2>${L("Bewertung (Stratege)", "Rating (strategist)")}</h2>
-    ${Object.keys(sd).length ? scoreBlock(sd) : `<p class="muted">${L("Noch keine Marktdaten.", "No market data yet.")}</p>`}`;
+    ${Object.keys(sd).length ? scoreBlock(sd) : `<p class="muted">${L("Noch keine Marktdaten.", "No market data yet.")}</p>`}
+    ${aiBlock(sd)}`;
   $("modal").classList.remove("hidden");
 }
 
@@ -323,7 +336,105 @@ async function loadAnalysis() {
   $("tips").innerHTML = a.vorschlaege.map((x) => `<li>${esc(tr(x))}</li>`).join("");
   $("byExit").innerHTML = aggTable(a.nach_ausstieg, L("Ausstieg", "Exit"));
   $("byScore").innerHTML = aggTable(a.nach_score, "Score");
+  $("byAi").innerHTML = aggTable(a.nach_ki_score || {}, L("KI-Score", "AI score"));
 }
+
+// ---------------------------------------------------------------- KI-Analyst
+let aiLoaded = false;
+const usd = (x, d = 4) => "$" + Number(x || 0).toFixed(d);
+const num = (x) => Number(x || 0).toLocaleString(LOCALE());
+
+async function loadAI() {
+  const d = await api("/api/ai");
+  if (!aiLoaded) { renderAISettings(d); aiLoaded = true; }
+  renderAIUsage(d.usage);
+}
+
+function renderAISettings(d) {
+  const s = d.settings;
+  const checks = Object.entries(d.checks).map(([k, v]) => `<label><input type="checkbox" data-check="${esc(k)}"
+    ${s.checks[k] ? "checked" : ""}> ${esc(L(v.de, v.en))}</label>`).join("");
+  const models = Object.entries(d.models).map(([k, v]) => `<option value="${esc(k)}" ${k === s.model ? "selected" : ""}>${esc(v)}</option>`).join("");
+  const keyInfo = s.api_key_masked
+    ? L(`Gespeichert: ${esc(s.api_key_masked)}${s.api_key_from_env ? " (aus /etc/memebot.env)" : ""}`,
+        `Stored: ${esc(s.api_key_masked)}${s.api_key_from_env ? " (from /etc/memebot.env)" : ""}`)
+    : L("Noch kein Key gespeichert.", "No key stored yet.");
+  $("aiSettings").innerHTML = `
+    <p class="hint">${L(`Optionaler Zusatz-Agent: Claude bewertet Name, Story, Socials, Website und Warnsignale eines Coins –
+      nur für Coins, die alle anderen Prüfungen bestanden haben. Fällt die KI aus, entscheidet der Bot ohne sie.`,
+      `Optional extra agent: Claude rates a coin's name, story, socials, website and red flags – only for coins that passed
+      every other check. If the AI fails, the bot decides without it.`)}</p>
+    <label class="switch"><input type="checkbox" id="aiEnabled" ${s.enabled ? "checked" : ""}> ${L("KI-Analyst eingeschaltet", "AI analyst enabled")}</label>
+    <div class="form">
+      <label>${L("Modus", "Mode")}</label><span></span>
+      <select id="aiMode">
+        <option value="observe" ${s.mode === "observe" ? "selected" : ""}>${L("Nur beobachten (Score speichern, Kauf unabhängig)", "Observe only (store score, buying unaffected)")}</option>
+        <option value="filter" ${s.mode === "filter" ? "selected" : ""}>${L("Filtern (Coins unter Mindest-Score ablehnen)", "Filter (reject coins below minimum score)")}</option>
+      </select>
+      <label>${L("Modell", "Model")}</label><span></span>
+      <select id="aiModel">${models}</select>
+      <label for="aiMin">${L("Mindest-Score (nur im Filter-Modus)", "Minimum score (filter mode only)")}</label>
+      <input id="aiMin" type="number" inputmode="decimal" min="0" max="100" value="${s.min_score}">
+      <label for="aiBudget">${L("Tagesbudget in USD (danach Pause bis Mitternacht UTC)", "Daily budget in USD (then paused until midnight UTC)")}</label>
+      <input id="aiBudget" type="number" inputmode="decimal" step="0.1" min="0" max="100" value="${s.daily_budget_usd}">
+    </div>
+    <h3>${L("Was die KI prüft", "What the AI checks")}</h3>
+    <div class="checklist">${checks}</div>
+    <h3>${L("Anthropic API-Key", "Anthropic API key")}</h3>
+    <div class="keyrow"><input id="aiKey" type="password" autocomplete="off" placeholder="sk-ant-…"></div>
+    <p class="hint">${keyInfo} ${L(`Key aus der Claude Console (platform.claude.com), Abrechnung pro Nutzung, getrennt vom claude.ai-Abo.
+      Er wird in der Datenbank des Bots gespeichert und nie an die Oberfläche zurückgegeben. Feld leer lassen = Key behalten.`,
+      `Key from the Claude Console (platform.claude.com), billed per use, separate from the claude.ai subscription.
+      It is stored in the bot's database and never sent back to the interface. Leave empty = keep key.`)}
+      ${s.api_key_masked && !s.api_key_from_env ? `<a href="#" id="aiClearKey">${L("Key löschen", "Delete key")}</a>` : ""}</p>`;
+  const clr = $("aiClearKey");
+  if (clr) clr.onclick = async (e) => { e.preventDefault(); if (confirm(L("API-Key löschen?", "Delete API key?"))) await saveAI({ clear_key: true }); };
+}
+
+function renderAIUsage(u) {
+  const box = (label, a) => kpi(label, usd(a.cost, 3), `${a.calls} ${L("Aufrufe", "calls")} · ${num(a.inp)} / ${num(a.out)} Tok.` +
+    (a.searches ? ` · ${a.searches} ${L("Suchen", "searches")}` : "") + (a.errors ? ` · ${a.errors} ${L("Fehler", "errors")}` : ""));
+  $("aiKpis").innerHTML = box(L("Heute (UTC)", "Today (UTC)"), u.today) + box(L("7 Tage", "7 days"), u.week) +
+    box(L("Gesamt", "Total"), u.total) +
+    kpi(L("Ø pro Aufruf", "Avg per call"), u.total.calls ? usd(u.total.cost / u.total.calls, 5) : "–", L("Kosten", "cost"));
+  $("aiDaily").innerHTML = `<tr><th>${L("Tag", "Day")}</th><th class="num">${L("Aufrufe", "Calls")}</th><th class="num">Input</th>
+    <th class="num">Output</th><th class="num">${L("Suchen", "Searches")}</th><th class="num">${L("Kosten", "Cost")}</th></tr>` +
+    (u.daily.map((r) => `<tr><td>${esc(r.day)}</td><td class="num">${r.calls}</td><td class="num">${num(r.inp)}</td>
+      <td class="num">${num(r.out)}</td><td class="num">${r.searches || 0}</td><td class="num">${usd(r.cost)}</td></tr>`).join("")
+      || `<tr><td colspan="6" class="muted">${L("noch keine Aufrufe", "no calls yet")}</td></tr>`);
+  $("aiRecent").innerHTML = `<tr><th>${L("Zeit", "Time")}</th><th>Token</th><th class="num">Score</th><th>${L("Urteil", "Verdict")}</th>
+    <th class="num">Tok. in/out</th><th class="num">${L("Kosten", "Cost")}</th></tr>` +
+    (u.recent.map((r) => `<tr><td>${dt(r.ts)}</td><td>${esc(r.symbol || "–")}</td>
+      <td class="num">${r.score != null ? Math.round(r.score) : "–"}</td>
+      <td style="white-space:normal">${r.ok ? esc(r.verdict || "") : `<span class="neg">${esc(r.error || L("Fehler", "error"))}</span>`}</td>
+      <td class="num">${num(r.input_tokens)} / ${num(r.output_tokens)}</td><td class="num">${usd(r.cost_usd, 5)}</td></tr>`).join("")
+      || `<tr><td colspan="6" class="muted">${L("noch keine Aufrufe", "no calls yet")}</td></tr>`);
+}
+
+async function saveAI(extra) {
+  const body = extra || {
+    enabled: $("aiEnabled").checked, mode: $("aiMode").value, model: $("aiModel").value,
+    min_score: $("aiMin").value, daily_budget_usd: $("aiBudget").value,
+    checks: Object.fromEntries([...document.querySelectorAll("[data-check]")].map((c) => [c.dataset.check, c.checked])),
+  };
+  if (!extra && $("aiKey").value.trim()) body.api_key = $("aiKey").value.trim();
+  const r = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  $("aiMsg").textContent = r.ok ? L("Gespeichert ✓", "Saved ✓") : L("Fehler: ", "Error: ") + (j.detail || r.status);
+  $("aiMsg").className = "hint " + (r.ok ? "pos" : "neg");
+  if (r.ok) { renderAISettings(j); renderAIUsage(j.usage); }
+}
+$("aiSave").onclick = () => saveAI();
+$("aiTest").onclick = async () => {
+  $("aiMsg").textContent = L("Teste …", "Testing …"); $("aiMsg").className = "hint";
+  if ($("aiKey") && $("aiKey").value.trim()) await saveAI();
+  const r = await fetch("/api/ai/test", { method: "POST" });
+  const j = await r.json();
+  $("aiMsg").textContent = r.ok ? L(`Verbindung ok ✓ (${j.model}, Kosten ${usd(j.cost_usd, 5)})`, `Connection ok ✓ (${j.model}, cost ${usd(j.cost_usd, 5)})`)
+    : L("Fehler: ", "Error: ") + (j.detail || r.status);
+  $("aiMsg").className = "hint " + (r.ok ? "pos" : "neg");
+  loadAI();
+};
 
 // ---------------------------------------------------------------- Konfiguration
 let settingsLoaded = false;
@@ -394,6 +505,7 @@ async function refresh() {
     else if (tab === "agents") await loadAgents();
     else if (tab === "analysis") await loadAnalysis();
     else if (tab === "config") await loadConfig();
+    else if (tab === "ai") await loadAI();
   } catch (e) {
     $("statusDot").className = "dot bad";
     $("statusLine").textContent = L("Keine Verbindung zum Bot (", "No connection to the bot (") + e.message + ")";

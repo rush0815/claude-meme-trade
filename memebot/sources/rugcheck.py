@@ -60,4 +60,6 @@ def summarize_report(rep: dict[str, Any]) -> dict[str, Any]:
         "risks": risks,
         "rugged": bool(rep.get("rugged")),
         "decimals": token.get("decimals"),
+        "description": str((rep.get("fileMeta") or {}).get("description") or "")[:1500],
+        "token_name": (rep.get("tokenMeta") or {}).get("name") or (rep.get("fileMeta") or {}).get("name"),
     }

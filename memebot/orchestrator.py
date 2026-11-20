@@ -6,6 +6,7 @@ import dataclasses
 import logging
 import time
 
+from .agents.ai_analyst import AIAnalyst
 from .agents.analyst import Analyst
 from .agents.base import Ctx
 from .agents.executor import LiveExecutor, PaperExecutor
@@ -46,6 +47,7 @@ class Bot:
         self.scout = Scout(ctx)
         self.rug = RugAnalyst(ctx)
         self.phase = PhaseAnalyst(ctx)
+        self.ai = AIAnalyst(ctx, client=getattr(ctx, "ai_client", None))
         self.strategist = Strategist(ctx)
         self.risk = RiskManager(ctx, self.portfolio)
         self.positions = PositionManager(ctx, self.executor, self.portfolio)
@@ -93,6 +95,13 @@ class Bot:
             details.update({k: v for k, v in ph.details.items() if k in ("vom_hoch_pct", "std_seit_hoch")})
         if not ph.ok:
             mark("waiting" if ph.retry else "rejected", ph.reason)
+            return
+        ai = await self.ai.check(m, sec.details)          # optional, siehe Reiter "KI-Analyst"
+        if ai.details:
+            details.update({k: v for k, v in ai.details.items() if k in ("ki_score", "ki_urteil_de", "ki_urteil_en",
+                                                                        "ki_red_flags", "ki_modus")})
+        if not ai.ok:
+            mark("rejected", ai.reason)
             return
         appr = await self.risk.approve(m, score)
         if not appr.ok:
