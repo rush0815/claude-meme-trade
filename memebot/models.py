@@ -32,6 +32,8 @@ class Market:
     volume_m5: float = 0.0
     volume_h1: float = 0.0
     volume_h6: float = 0.0
+    websites: list = field(default_factory=list)     # [url, ...] laut DexScreener
+    socials: list = field(default_factory=list)      # [{"type": "twitter", "url": ...}, ...]
 
     @property
     def age_min(self) -> float:
@@ -64,6 +66,9 @@ class Market:
             volume_m5=float(g("volume", "m5")),
             volume_h1=float(g("volume", "h1")),
             volume_h6=float(g("volume", "h6")),
+            websites=[w.get("url") for w in ((p.get("info") or {}).get("websites") or []) if isinstance(w, dict) and w.get("url")],
+            socials=[{"type": x.get("type", ""), "url": x.get("url", "")}
+                     for x in ((p.get("info") or {}).get("socials") or []) if isinstance(x, dict) and x.get("url")],
         )
 
 

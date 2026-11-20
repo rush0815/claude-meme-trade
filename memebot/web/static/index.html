@@ -22,6 +22,7 @@
   <button data-tab="trades" data-i18n="Trades">Trades</button>
   <button data-tab="agents" data-i18n="Agenten">Agenten</button>
   <button data-tab="analysis" data-i18n="Analyse">Analyse</button>
+  <button data-tab="ai" data-i18n="KI-Analyst">KI-Analyst</button>
   <button data-tab="config" data-i18n="Konfiguration">Konfiguration</button>
   <button data-tab="control" data-i18n="Steuerung">Steuerung</button>
 </nav>
@@ -63,6 +64,7 @@
           <option value="Stratege" data-i18n="Stratege">Stratege</option>
           <option value="Rug-Analyst">Rug-Analyst</option>
           <option value="Phasen-Analyst" data-i18n="Phasen-Analyst">Phasen-Analyst</option>
+          <option value="KI-Analyst" data-i18n="KI-Analyst">KI-Analyst</option>
           <option value="Risk-Manager">Risk-Manager</option>
           <option value="Position-Manager">Position-Manager</option>
           <option value="Orchestrator">Orchestrator</option>
@@ -83,6 +85,28 @@
     <div class="card"><h2 data-i18n="Vorschläge des Analysten">Vorschläge des Analysten</h2><ul id="tips"></ul></div>
     <div class="card"><h2 data-i18n="Nach Ausstiegsgrund">Nach Ausstiegsgrund</h2><div class="scroll"><table id="byExit"></table></div></div>
     <div class="card"><h2 data-i18n="Nach Einstiegs-Score">Nach Einstiegs-Score</h2><div class="scroll"><table id="byScore"></table></div></div>
+    <div class="card"><h2 data-i18n="Nach KI-Score">Nach KI-Score</h2><div class="scroll"><table id="byAi"></table></div></div>
+  </section>
+
+  <section id="ai" class="tab">
+    <div class="card">
+      <h2 data-i18n="KI-Analyst">KI-Analyst</h2>
+      <div id="aiSettings"></div>
+      <div class="buttons" style="margin-top:12px">
+        <button class="btn" id="aiSave" data-i18n="Speichern">Speichern</button>
+        <button class="btn" id="aiTest" data-i18n="Verbindung testen">Verbindung testen</button>
+      </div>
+      <p class="hint" id="aiMsg"></p>
+    </div>
+    <div class="card">
+      <h2 data-i18n="Token-Verbrauch">Token-Verbrauch</h2>
+      <div class="kpis" id="aiKpis"></div>
+      <div class="scroll"><table id="aiDaily"></table></div>
+    </div>
+    <div class="card">
+      <h2 data-i18n="Letzte KI-Aufrufe">Letzte KI-Aufrufe</h2>
+      <div class="scroll"><table id="aiRecent"></table></div>
+    </div>
   </section>
 
   <section id="config" class="tab">

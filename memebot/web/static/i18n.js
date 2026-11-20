@@ -28,10 +28,12 @@ const UI_EN = {
   "Speichern": "Save", "Woher kommen die Daten?": "Where does the data come from?",
   "Aktive Konfiguration": "Active configuration", "Sprache": "Language",
   "Sprache der Oberfläche. Wird in diesem Browser gespeichert.": "Interface language. Stored in this browser.",
+  "KI-Analyst": "AI analyst", "Verbindung testen": "Test connection", "Token-Verbrauch": "Token usage",
+  "Letzte KI-Aufrufe": "Recent AI calls", "Nach KI-Score": "By AI score",
 };
 const t = (s) => (LANG === "en" ? (UI_EN[s] ?? s) : s);
 
-const AGENT_EN = { "Stratege": "Strategist", "Phasen-Analyst": "Phase analyst" };
+const AGENT_EN = { "Stratege": "Strategist", "Phasen-Analyst": "Phase analyst", "KI-Analyst": "AI analyst" };
 const STATUS = {
   de: { new: "neu", waiting: "wartet", rejected: "abgelehnt", bought: "gekauft", expired: "abgelaufen" },
   en: { new: "new", waiting: "waiting", rejected: "rejected", bought: "bought", expired: "expired" },
@@ -125,6 +127,14 @@ const PATTERNS_EN = [
   [/^Ausstiegsregeln auf v2 umgestellt .*$/, "Exit rules switched to v2 (break-even from +25 %, TP1 +30 %, trailing from +50 %, TP2 +80 %, time limit 2 h)"],
   [/^Takte umgestellt: .*$/, "Timing changed: watchlist every 30 s, main cycle 5 s, max. age 8 h"],
   [/^Zyklus-Fehler: (.+)$/, "Cycle error: $1"],
+  // KI-Analyst
+  [/^KI-Score (\d+) unter (\d+)$/, "AI score $1 below $2"],
+  [/^(.+?): KI-Score (\d+) – (.*) \((.+) ct\)$/, "$1: AI score $2 – $3 ($4 ct)"],
+  [/^(.+?): KI nicht erreichbar \((.+)\) – Entscheidung ohne KI$/, "$1: AI unreachable ($2) – deciding without AI"],
+  [/^(.+?): KI-Antwort nicht lesbar – Entscheidung ohne KI$/, "$1: AI answer unreadable – deciding without AI"],
+  [/^Tagesbudget von (.+) \$ erreicht – KI pausiert bis Mitternacht \(UTC\)$/, "Daily budget of $1 $ reached – AI paused until midnight (UTC)"],
+  [/^KI-Einstellungen geändert: (.+)$/, "AI settings changed: $1"],
+  [/^ohne KI$/, "without AI"], [/^KI (.+)$/, "AI $1"],
   // Analyst
   [/^Noch zu wenig Daten \((\d+) Trades\)\. Aussagekräftig wird es ab ca\. 30–50 Trades\.$/, "Not enough data yet ($1 trades). Meaningful from about 30–50 trades."],
   [/^Profit-Faktor (.+) < 1: Die Strategie verliert gerade Geld\. Nicht live schalten\.$/, "Profit factor $1 < 1: the strategy is losing money. Do not go live."],

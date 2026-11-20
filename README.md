@@ -29,6 +29,7 @@ Alle Werte stehen in `config.toml` und lassen sich anpassen.
 | **Risk-Manager** | Positionsgröße, Limits, Not-Aus – hat Vetorecht |
 | **Executor** | Paper: echte Jupiter-Quotes + Sicherheitsabschlag · Live: Jupiter-Swap, lokal signiert, über eigenen RPC gesendet |
 | **Position-Manager** | überwacht offene Positionen, löst Ausstiege aus – mit Echtzeit-Kursen direkt aus der Blockchain (Helius, PumpSwap-Pools), sonst DexScreener alle 2 s |
+| **KI-Analyst** (optional) | Claude bewertet Name, Story, Socials, Website, Warnsignale und Trend – einzeln abschaltbar, Modus „nur beobachten“ oder „filtern“, Tagesbudget, Token-/Kostenübersicht im Reiter *KI-Analyst*. Braucht einen API-Key aus der Claude Console. |
 | **Analyst** | Statistik nach Ausstiegsgrund und Score, Vorschläge für die Einstellungen |
 
 ## Web-Oberfläche (Port 8080)

@@ -83,6 +83,24 @@ CREATE TABLE IF NOT EXISTS equity (
     cash_sol REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS ai_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL,
+    mint TEXT,
+    symbol TEXT,
+    model TEXT,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    searches INTEGER NOT NULL DEFAULT 0,
+    fetches INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0,
+    score REAL,
+    verdict TEXT,
+    ok INTEGER NOT NULL DEFAULT 1,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_ai_ts ON ai_calls(ts);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
