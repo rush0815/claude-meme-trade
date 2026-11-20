@@ -380,6 +380,26 @@ def create_app(bot: "Bot") -> FastAPI:
         db.log("Web-UI", "KI-Einstellungen geändert: " + ", ".join(changed))
         return ai_get()
 
+    @app.get("/api/ai/calls")
+    def ai_calls(limit: int = 200, offset: int = 0, _: None = Depends(auth)):
+        return bot.ai.calls(min(limit, 5000), max(offset, 0))
+
+    @app.get("/api/ai/calls.csv")
+    def ai_calls_csv(_: None = Depends(auth)):
+        import csv
+        import io
+        from fastapi.responses import Response
+        buf = io.StringIO()
+        w = csv.writer(buf, delimiter=";")
+        w.writerow(["zeit_utc", "token", "mint", "modell", "input_tokens", "output_tokens", "websuchen", "webabrufe",
+                    "kosten_usd", "score", "urteil", "ok", "fehler"])
+        for r in reversed(bot.ai.calls(100000)):
+            w.writerow([time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(r["ts"])), r["symbol"], r["mint"], r["model"],
+                        r["input_tokens"], r["output_tokens"], r["searches"], r["fetches"],
+                        f"{r['cost_usd']:.6f}".replace(".", ","), r["score"], r["verdict"], r["ok"], r["error"]])
+        return Response(buf.getvalue(), media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": "attachment; filename=ki-aufrufe.csv"})
+
     @app.post("/api/ai/test")
     async def ai_test(_: None = Depends(auth)):
         try:

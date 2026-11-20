@@ -47,6 +47,7 @@ SEARCH_USD = 0.01                                                               
 DEFAULTS: dict[str, Any] = {
     "enabled": False, "mode": "observe", "model": "claude-haiku-5-5", "min_score": 50,
     "daily_budget_usd": 1.0, "api_key": "",
+    "credit_usd": None, "credit_set_at": None,      # Guthaben laut Claude Console (von Hand eingetragen)
     "checks": {"name": True, "description": True, "socials": True, "website": True, "red_flags": True, "trend": False},
 }
 
@@ -76,6 +77,14 @@ def save_settings(db, values: dict) -> dict:
     if isinstance(values.get("checks"), dict):
         cur["checks"] = {**DEFAULTS["checks"], **(cur.get("checks") or {}),
                          **{k: bool(v) for k, v in values["checks"].items() if k in CHECKS}}
+    if "credit_usd" in values:
+        if values["credit_usd"] in (None, ""):
+            cur["credit_usd"], cur["credit_set_at"] = None, None
+        else:
+            v = float(values["credit_usd"])
+            if not 0 <= v <= 100000:
+                raise ValueError("Guthaben: erlaubt 0–100000")
+            cur["credit_usd"], cur["credit_set_at"] = v, time.time()
     if values.get("clear_key"):
         cur["api_key"] = ""
     elif values.get("api_key") and "…" not in str(values["api_key"]):
@@ -209,6 +218,9 @@ class AIAnalyst(Agent):
         hit = self._cache.get(m.mint)
         if hit and time.time() - hit[0] < self.CACHE_S:
             return hit[1]
+        credit = self.credit()
+        if credit and credit["remaining"] <= 0:
+            return Verdict(True, "KI-Guthaben aufgebraucht")
         if self.spent_today() >= float(cfg["daily_budget_usd"]):
             if self._budget_note_day != utc_day_start():
                 self._budget_note_day = utc_day_start()
@@ -253,6 +265,21 @@ class AIAnalyst(Agent):
         return {"ok": True, "answer": text.strip()[:50], "cost_usd": c, "model": cfg["model"]}
 
     # -------------------------------------------------------------- Übersicht
+    def credit(self) -> dict | None:
+        """Restguthaben = eingetragenes Guthaben minus Kosten des Bots seitdem (Schätzung)."""
+        cfg = settings(self.db)
+        if cfg.get("credit_usd") is None:
+            return None
+        since = float(cfg.get("credit_set_at") or 0)
+        r = self.db.one("SELECT COALESCE(SUM(cost_usd),0) AS c, COUNT(*) AS n FROM ai_calls WHERE ts>=?", (since,))
+        used = float(r["c"]) if r else 0.0
+        return {"set_usd": cfg["credit_usd"], "set_at": since, "used_usd": round(used, 6),
+                "calls": r["n"] if r else 0, "remaining": round(cfg["credit_usd"] - used, 6)}
+
+    def calls(self, limit: int = 50, offset: int = 0) -> list[dict]:
+        return self.db.q("SELECT id, ts, symbol, mint, model, input_tokens, output_tokens, searches, fetches, cost_usd,"
+                         " score, verdict, ok, error FROM ai_calls ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset))
+
     def usage(self) -> dict:
         def agg(since: float) -> dict:
             r = self.db.one("SELECT COUNT(*) AS calls, COALESCE(SUM(input_tokens),0) AS inp, COALESCE(SUM(output_tokens),0) AS out,"
@@ -263,7 +290,5 @@ class AIAnalyst(Agent):
         daily = self.db.q("SELECT date(ts,'unixepoch') AS day, COUNT(*) AS calls, SUM(input_tokens) AS inp,"
                           " SUM(output_tokens) AS out, SUM(searches) AS searches, SUM(cost_usd) AS cost"
                           " FROM ai_calls WHERE ts>=? GROUP BY day ORDER BY day DESC", (day0 - 13 * 86400,))
-        recent = self.db.q("SELECT ts, symbol, mint, model, input_tokens, output_tokens, searches, fetches, cost_usd, score,"
-                           " verdict, ok, error FROM ai_calls ORDER BY id DESC LIMIT 50")
-        return {"today": agg(day0), "week": agg(day0 - 6 * 86400), "total": agg(0), "daily": daily, "recent": recent,
-                "spent_today": round(self.spent_today(), 4)}
+        return {"today": agg(day0), "week": agg(day0 - 6 * 86400), "total": agg(0), "daily": daily,
+                "recent": self.calls(50), "spent_today": round(self.spent_today(), 4), "credit": self.credit()}
