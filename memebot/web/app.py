@@ -294,10 +294,11 @@ def create_app(bot: "Bot") -> FastAPI:
         rows = db.q("SELECT * FROM candidates ORDER BY COALESCE(last_checked, first_seen) DESC LIMIT ?",
                     (min(limit, 1000),))
         for r in rows:
-            try:
-                r["details"] = json.loads(r["details"]) if r.get("details") else {}
-            except ValueError:
-                r["details"] = {}
+            for k in ("details", "deep"):
+                try:
+                    r[k] = json.loads(r[k]) if r.get(k) else ({} if k == "details" else None)
+                except ValueError:
+                    r[k] = {} if k == "details" else None
         return rows
 
     @app.get("/api/funnel")
@@ -332,6 +333,23 @@ def create_app(bot: "Bot") -> FastAPI:
         days = max(1, min(int(days), 31))
         return db.q("SELECT opened_at, closed_at, status, pnl_sol FROM positions WHERE mode=? AND opened_at>=?"
                     " ORDER BY opened_at", (mode(), time.time() - days * 86400 - 86400))
+
+    @app.get("/api/candidates/{mint}")
+    def candidate(mint: str, _: None = Depends(auth)):
+        r = db.one("SELECT * FROM candidates WHERE mint=?", (mint,))
+        if not r:
+            r = {"mint": mint, "status": "expired", "reason": "nicht mehr in der Watchlist", "source": "",
+                 "first_seen": None, "last_checked": None, "symbol": None, "score": None}
+        for k in ("details", "deep"):
+            try:
+                r[k] = json.loads(r[k]) if r.get(k) else ({} if k == "details" else None)
+            except ValueError:
+                r[k] = {} if k == "details" else None
+        pos = db.one("SELECT id, status FROM positions WHERE mint=? ORDER BY opened_at DESC LIMIT 1", (mint,))
+        r["position_id"] = pos["id"] if pos else None
+        r["ai_calls"] = db.q("SELECT ts, score, verdict, cost_usd, ok, error FROM ai_calls WHERE mint=? ORDER BY ts DESC",
+                             (mint,))
+        return r
 
     @app.get("/api/analysis")
     def analysis(_: None = Depends(auth)):
