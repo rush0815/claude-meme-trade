@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS candidates (
     status TEXT NOT NULL DEFAULT 'new',           -- new | waiting | rejected | bought | expired
     reason TEXT,
     score REAL,
-    details TEXT
+    details TEXT,
+    deep TEXT                                     -- letzte Tiefenprüfung (Sicherheit, Phase, KI, Risiko) als JSON
 );
 
 CREATE TABLE IF NOT EXISTS equity (
@@ -146,6 +147,8 @@ class DB:
         cols = {r[1] for r in self.conn.execute("PRAGMA table_info(candidates)")}
         if "details" not in cols:
             self.conn.execute("ALTER TABLE candidates ADD COLUMN details TEXT")
+        if "deep" not in cols:
+            self.conn.execute("ALTER TABLE candidates ADD COLUMN deep TEXT")
         fcols = {r[1] for r in self.conn.execute("PRAGMA table_info(fills)")}
         if "market_price" not in fcols:
             self.conn.execute("ALTER TABLE fills ADD COLUMN market_price REAL")
@@ -245,11 +248,11 @@ class DB:
             return cur.rowcount > 0
 
     def set_candidate(self, mint: str, status: str, reason: str = "", score: float | None = None,
-                      symbol: str | None = None, details: dict | None = None) -> None:
+                      symbol: str | None = None, details: dict | None = None, deep: dict | None = None) -> None:
         self.x("UPDATE candidates SET status=?, reason=?, score=COALESCE(?,score), symbol=COALESCE(?,symbol),"
-               " details=COALESCE(?,details), last_checked=? WHERE mint=?",
+               " details=COALESCE(?,details), deep=COALESCE(?,deep), last_checked=? WHERE mint=?",
                (status, reason, score, symbol, json.dumps(details) if details is not None else None,
-                time.time(), mint))
+                json.dumps(deep) if deep is not None else None, time.time(), mint))
 
     def due_candidates(self, recheck_s: float, limit: int) -> list[dict]:
         return self.q("SELECT * FROM candidates WHERE status IN ('new','waiting') AND"

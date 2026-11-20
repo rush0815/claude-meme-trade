@@ -392,33 +392,65 @@ async function loadAgents() {
   candCache = cands;
   $("candTable").innerHTML = `<tr><th>Token</th><th>Status</th><th class="num">Score</th><th>${L("Grund", "Reason")}</th>
     <th>${L("Quelle", "Source")}</th><th>${L("geprüft", "checked")}</th></tr>` +
-    cands.map((c, i) => `<tr class="click" data-i="${i}"><td>${esc(c.symbol || c.mint.slice(0, 6))}</td>
+    cands.map((c, i) => `<tr class="click" data-i="${i}"><td>${esc(c.symbol || c.mint.slice(0, 6))}${c.deep ? " 🔍" : ""}</td>
       <td><span class="tag ${esc(c.status)}">${esc(statusName(c.status))}</span></td>
       <td class="num">${c.score != null ? Math.round(c.score) : "–"}</td><td>${esc(tr(c.reason))}</td><td>${esc(c.source)}</td>
       <td>${c.last_checked ? ago(c.last_checked) : "–"}</td></tr>`).join("");
-  $("candTable").querySelectorAll("tr.click").forEach((r) => r.onclick = () => showCandidate(candCache[+r.dataset.i]));
-  $("eventLog").innerHTML = evs.map((e) => `<div class="${esc(e.level)}"><span class="t">${dt(e.ts)}</span>
+  $("candTable").querySelectorAll("tr.click").forEach((r) => r.onclick = () => showCandidateByMint(candCache[+r.dataset.i].mint));
+  $("eventLog").innerHTML = evs.map((e) => `<div class="${esc(e.level)}${e.mint ? " click" : ""}" ${e.mint ? `data-mint="${esc(e.mint)}"` : ""}><span class="t">${dt(e.ts)}</span>
     <span class="a">${esc(agentName(e.agent))}</span> ${esc(tr(e.message))}</div>`).join("")
     || `<div class="empty">${L("Noch keine Einträge.", "No entries yet.")}</div>`;
+  $("eventLog").querySelectorAll("[data-mint]").forEach((d) => d.onclick = () => showCandidateByMint(d.dataset.mint));
+}
+
+const STEP_EN = { "Stratege": "Strategist", "Rug-Analyst": "Rug analyst", "Phasen-Analyst": "Phase analyst",
+  "KI-Analyst": "AI analyst", "Risk-Manager": "Risk manager", "Verkaufstest": "Sell test" };
+
+function deepBlock(dp) {
+  if (!dp) return "";
+  const steps = (dp.steps || []).map((st) => `<div>${st.ok ? "✅" : "❌"} ${esc(LANG === "en" ? (STEP_EN[st.name] || st.name) : st.name)}</div>
+    <div>${esc(tr(st.reason || ""))}</div>`).join("");
+  return `<h2>${L("Letzte Tiefenprüfung", "Last deep check")} <span class="muted">(${ago(dp.ts)})</span></h2>
+    <p class="hint">${L(`Ab hier lief der Coin durch Sicherheits-, Phasen- und KI-Prüfung. Die Werte zeigen den Stand <b>in diesem Moment</b> –
+      die Bewertung weiter unten ist der aktuelle Stand und kann inzwischen ganz anders aussehen.`,
+      `From here the coin went through the security, phase and AI checks. These values show the state <b>at that moment</b> –
+      the rating further down is the current state and may look very different by now.`)}</p>
+    <div class="kv">${steps}
+      <div>${L("Ergebnis", "Outcome")}</div><div><b>${esc(statusName(dp.status))}</b> – ${esc(tr(dp.reason))}</div>
+      <div>${L("Marktkap. / Liquidität", "Market cap / liquidity")}</div><div>${fmtMC(dp.mcap)} / ${fmtMC(dp.liq_usd)}</div>
+    </div>
+    <h3>${L("Bewertung damals", "Rating at that time")} (Score ${Math.round(dp.score)})</h3>
+    ${scoreBlock(dp.details || {})}
+    ${aiBlock(dp.details || {}, true)}`;
+}
+
+async function showCandidateByMint(mint) {
+  try { showCandidate(await api("/api/candidates/" + encodeURIComponent(mint))); } catch (e) { /* nicht gefunden */ }
 }
 
 function showCandidate(c) {
   const sd = c.details || {};
+  const calls = (c.ai_calls || []).map((a) => `<div>${dt(a.ts)}</div><div>${a.ok ? `KI-Score ${a.score != null ? Math.round(a.score) : "–"} – ${esc(a.verdict || "")}`
+    : `<span class="neg">${esc(a.error || "")}</span>`} <span class="muted">(${usd(a.cost_usd, 5)})</span></div>`).join("");
   $("modalContent").innerHTML = `
     <h2>${esc(c.symbol || c.mint.slice(0, 6))} <span class="tag ${esc(c.status)}">${esc(statusName(c.status))}</span></h2>
     <div class="kv">
       <div>Score</div><div>${c.score != null ? Math.round(c.score) : "–"} (${L("Kaufschwelle", "buy threshold")} ${lastSummary?.min_score ?? "–"})</div>
       <div>${L("Entscheidung", "Decision")}</div><div>${esc(tr(c.reason))}</div>
       <div>${L("Quelle", "Source")}</div><div>${esc(c.source)}</div>
-      <div>${L("Entdeckt / geprüft", "Found / checked")}</div><div>${ago(c.first_seen)} / ${c.last_checked ? ago(c.last_checked) : "–"}</div>
+      <div>${L("Entdeckt / geprüft", "Found / checked")}</div><div>${c.first_seen ? ago(c.first_seen) : "–"} / ${c.last_checked ? ago(c.last_checked) : "–"}</div>
       <div>Mint</div><div style="word-break:break-all">${esc(c.mint)}</div>
       <div>Links</div><div><a href="https://dexscreener.com/solana/${esc(c.mint)}" target="_blank">DexScreener</a> ·
         <a href="https://rugcheck.xyz/tokens/${esc(c.mint)}" target="_blank">RugCheck</a></div>
     </div>
-    <h2>${L("Bewertung (Stratege)", "Rating (strategist)")}</h2>
+    ${c.position_id ? `<p><button class="btn small" id="openTrade">${L("Trade dazu öffnen", "Open related trade")}</button></p>` : ""}
+    ${deepBlock(c.deep)}
+    ${calls ? `<h3>${L("KI-Aufrufe zu diesem Coin", "AI calls for this coin")}</h3><div class="kv">${calls}</div>` : ""}
+    <h2>${L("Bewertung jetzt (Stratege)", "Current rating (strategist)")}</h2>
     ${Object.keys(sd).length ? scoreBlock(sd) : `<p class="muted">${L("Noch keine Marktdaten.", "No market data yet.")}</p>`}
-    ${aiBlock(sd, true)}`;
+    ${c.deep ? "" : aiBlock(sd, true)}`;
   $("modal").classList.remove("hidden");
+  if (c.position_id) $("openTrade").onclick = () => showPosition(c.position_id);
 }
 
 // ---------------------------------------------------------------- Analyse
@@ -596,13 +628,14 @@ function renderCalls(rows, total) {
   const sum = rows.reduce((a, r) => a + (r.cost_usd || 0), 0);
   $("aiRecent").innerHTML = `<tr><th>${L("Zeit / Token", "Time / token")}</th><th class="num">Score</th><th>${L("Urteil", "Verdict")}</th>
     <th class="num">${L("Kosten", "Cost")}</th></tr>` +
-    (rows.map((r) => `<tr><td>${dt(r.ts)}<br><span class="muted">${esc(r.symbol || "–")}</span></td>
+    (rows.map((r) => `<tr ${r.mint ? `class="click" data-mint="${esc(r.mint)}"` : ""}><td>${dt(r.ts)}<br><span class="${r.mint ? "" : "muted"}">${esc(r.symbol || "–")}${r.mint ? " ›" : ""}</span></td>
       <td class="num">${r.score != null ? Math.round(r.score) : "–"}</td>
       <td style="white-space:normal">${r.ok ? esc(r.verdict || "") : `<span class="neg">${esc(r.error || L("Fehler", "error"))}</span>`}</td>
       <td class="num">${usd(r.cost_usd, 5)}<br><span class="muted">${num(r.input_tokens)} ${L("rein", "in")} · ${num(r.output_tokens)} ${L("raus", "out")}${r.searches ? " · " + r.searches + L(" Suche", " search") : ""}</span></td></tr>`).join("")
       || `<tr><td colspan="4" class="muted">${L("noch keine Aufrufe", "no calls yet")}</td></tr>`) +
     (rows.length ? `<tr><td colspan="3"><b>${L(`Summe (${rows.length} Aufrufe${total && total.calls > rows.length ? " von " + total.calls : ""})`,
       `Total (${rows.length} calls${total && total.calls > rows.length ? " of " + total.calls : ""})`)}</b></td><td class="num"><b>${usd(sum, 4)}</b></td></tr>` : "");
+  $("aiRecent").querySelectorAll("tr[data-mint]").forEach((tr0) => tr0.onclick = () => showCandidateByMint(tr0.dataset.mint));
 }
 $("aiAll").onclick = async () => {
   aiShowAll = true;

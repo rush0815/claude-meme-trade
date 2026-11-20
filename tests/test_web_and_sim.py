@@ -175,3 +175,28 @@ def test_trade_times_endpoint(tmp_path):
     rows = c.get("/api/trade-times?days=31").json()
     assert len(rows) == 2 and all("opened_at" in r and "pnl_sol" in r for r in rows)   # 40 Tage alt fällt raus
     assert len(c.get("/api/trade-times?days=500").json()) == 2                          # max. 31 Tage
+
+
+def test_deep_check_trail_kept_after_reevaluation(tmp_path):
+    bot = make_bot(tmp_path)
+    bot.cfg["scout"]["recheck_seconds"] = 0
+
+    async def go():
+        for _ in range(200):
+            bot.ctx.dex._last = 0
+            await bot.cycle()
+            await bot.position_tick()
+            if bot.db.one("SELECT COUNT(*) AS n FROM candidates WHERE deep IS NOT NULL")["n"] >= 2:
+                break
+    asyncio.run(go())
+    row = bot.db.one("SELECT * FROM candidates WHERE deep IS NOT NULL LIMIT 1")
+    assert row
+    c = TestClient(create_app(bot))
+    d = c.get(f"/api/candidates/{row['mint']}").json()
+    names = [s["name"] for s in d["deep"]["steps"]]
+    assert names[0] == "Stratege" and "Rug-Analyst" in names and d["deep"]["score"] >= 65
+    # spätere einfache Neubewertung überschreibt die Tiefenprüfung nicht
+    bot.db.set_candidate(row["mint"], "waiting", "kein Momentum", 10, None, {"kaufdruck": 0})
+    d2 = c.get(f"/api/candidates/{row['mint']}").json()
+    assert d2["deep"]["steps"] == d["deep"]["steps"] and d2["reason"] == "kein Momentum"
+    assert c.get("/api/candidates/UNBEKANNT").json()["status"] == "expired"

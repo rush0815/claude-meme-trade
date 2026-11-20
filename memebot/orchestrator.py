@@ -73,9 +73,17 @@ class Bot:
             return
         # Score immer berechnen (billig) und speichern -> in der Watchlist nachvollziehbar
         score, details = self.strategist.score(m)
+        deep = {"active": False, "steps": []}            # Tiefenprüfung: ab Sicherheitscheck mitschreiben
 
         def mark(status: str, reason: str) -> None:
-            self.db.set_candidate(mint, status, reason, score, m.symbol, details)
+            snap = None
+            if deep["active"]:
+                snap = {"ts": time.time(), "score": score, "details": dict(details), "status": status,
+                        "reason": reason, "steps": deep["steps"], "mcap": m.fdv, "liq_usd": m.liquidity_usd}
+            self.db.set_candidate(mint, status, reason, score, m.symbol, details, deep=snap)
+
+        def step(name: str, ok: bool, reason: str) -> None:
+            deep["steps"].append({"name": name, "ok": ok, "reason": reason})
 
         v = self.strategist.prefilter(m)
         if not v.ok:
@@ -88,17 +96,23 @@ class Bot:
         if score < self.cfg.strategy.min_score:
             mark("waiting", f"Score {score:.0f} unter {self.cfg.strategy.min_score}")
             return
+        deep["active"] = True
+        step("Stratege", True, f"Score {score:.0f}")
         sec = await self.rug.check(m)
+        step("Rug-Analyst", sec.ok, sec.reason)
         if not sec.ok:
             mark("waiting" if sec.retry else "rejected", sec.reason)
             return
         ph = await self.phase.check(m)
+        step("Phasen-Analyst", ph.ok, ph.reason)
         if ph.details:
             details.update({k: v for k, v in ph.details.items() if k in ("vom_hoch_pct", "std_seit_hoch")})
         if not ph.ok:
             mark("waiting" if ph.retry else "rejected", ph.reason)
             return
         ai = await self.ai.check(m, sec.details)          # optional, siehe Reiter "KI-Analyst"
+        step("KI-Analyst", ai.ok, ai.reason if not ai.details else f"KI-Score {ai.details.get('ki_score')}"
+             + ("" if ai.ok else f" – {ai.reason}"))
         if not ai.details:
             details["ki_hinweis"] = ai.reason                 # warum es keine KI-Bewertung gibt
         if ai.details:
@@ -108,12 +122,14 @@ class Bot:
             mark("rejected", ai.reason)
             return
         appr = await self.risk.approve(m, score)
+        step("Risk-Manager", appr.ok, appr.reason)
         if not appr.ok:
             mark("waiting" if appr.retry else "rejected", appr.reason)
             return
         size = appr.details["size_sol"]
         dec = await self.executor.decimals(m.mint, sec.details.get("decimals"))
         st = await self.rug.sell_test(m, size, dec)
+        step("Verkaufstest", st.ok, st.reason)
         if not st.ok:
             mark("waiting" if st.retry else "rejected", st.reason)
             self.rug.log(f"{m.symbol}: {st.reason}", mint=mint)
