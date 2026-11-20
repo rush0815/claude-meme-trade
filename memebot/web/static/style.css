@@ -74,3 +74,7 @@ a { color: var(--accent); }
 .tag.bought { background: var(--green); color: #000; } .tag.rejected { background: #5a1e1e; }
 .tag.waiting { background: #3a3220; }
 tr.click { cursor: pointer; }
+.form { display: grid; grid-template-columns: 1fr 110px; gap: 8px 12px; align-items: center; margin-bottom: 12px; }
+.form label { font-size: 14px; }
+.form input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px; font-size: 16px; width: 100%; text-align: right; }

@@ -65,3 +65,19 @@ def test_funnel_groups_reasons(tmp_path):
         bot.db.set_candidate(f"M{i}", "waiting", r, 40 + i)
     f = TestClient(create_app(bot)).get("/api/funnel").json()
     assert f["kandidaten"] == 3 and f["gruende"][0]["anzahl"] == 2 and "Liquidität" in f["gruende"][0]["grund"]
+
+
+def test_settings_change_applies_live_and_persists(tmp_path):
+    bot = make_bot(tmp_path)
+    c = TestClient(create_app(bot))
+    items = {i["key"]: i["value"] for i in c.get("/api/settings").json()}
+    assert items["exit.tp1_pct"] == 40
+    r = c.post("/api/settings", json={"exit.tp1_pct": 25, "exit.stop_loss_pct": 15})
+    assert r.status_code == 200
+    assert bot.cfg["exit"]["take_profit_levels"][0] == [25.0, 0.33]
+    assert bot.cfg["exit"]["stop_loss_pct"] == 15
+    assert c.post("/api/settings", json={"exit.stop_loss_pct": 500}).status_code == 400
+    assert c.post("/api/settings", json={"exit.tp1_fraction": 0.8}).status_code == 400   # 0.8 + 0.33 > 1
+    # Neustart: Werte kommen aus der Datenbank zurück
+    bot2 = make_bot(tmp_path)
+    assert bot2.cfg["exit"]["take_profit_levels"][0][0] == 25 and bot2.cfg["exit"]["stop_loss_pct"] == 15

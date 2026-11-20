@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Body, Depends, FastAPI, HTTPException, status
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
@@ -32,6 +32,14 @@ def create_app(bot: "Bot") -> FastAPI:
             secrets.compare_digest(cred.password, pw)
         if not ok:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"})
+
+    stats_cache: dict = {"t": 0.0, "v": None}
+
+    def cached_stats() -> dict:
+        """Statistik höchstens alle 10 s neu berechnen – die Oberfläche fragt alle 2 s."""
+        if time.time() - stats_cache["t"] > 10 or stats_cache["v"] is None:
+            stats_cache["v"], stats_cache["t"] = bot.analyst.stats(), time.time()
+        return stats_cache["v"]
 
     def mode() -> str:
         return bot.ctx.mode
@@ -58,7 +66,7 @@ def create_app(bot: "Bot") -> FastAPI:
     @app.get("/api/summary")
     async def summary(_: None = Depends(auth)):
         equity, cash = await bot.portfolio.equity()
-        st = bot.analyst.stats()
+        st = cached_stats()
         open_pos = [enrich(p) for p in db.open_positions(mode())]
         start = float(bot.cfg.paper_start_sol) if mode() == "paper" else None
         first = db.one("SELECT equity_sol FROM equity ORDER BY ts LIMIT 1")
@@ -158,6 +166,23 @@ def create_app(bot: "Bot") -> FastAPI:
     def config(_: None = Depends(auth)):
         hide = {"api", "web"}
         return {k: v for k, v in bot.cfg.items() if k not in hide and not k.startswith("_")}
+
+    @app.get("/api/settings")
+    def get_settings(_: None = Depends(auth)):
+        from ..overrides import EDITABLE, current
+        cur = current(bot.cfg)
+        return [{"key": k, "label": v[3], "min": v[1], "max": v[2], "value": cur[k]} for k, v in EDITABLE.items()]
+
+    @app.post("/api/settings")
+    def set_settings(values: dict = Body(...), _: None = Depends(auth)):
+        from ..overrides import save
+        try:
+            new = save(bot.cfg, db, values)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        db.log("Web-UI", "Einstellungen geändert: " + ", ".join(f"{k.split('.')[1]}={v}" for k, v in values.items()))
+        stats_cache["t"] = 0
+        return new
 
     @app.post("/api/control/{action}")
     def control(action: str, _: None = Depends(auth)):
