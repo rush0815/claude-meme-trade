@@ -28,7 +28,7 @@ Alle Werte stehen in `config.toml` und lassen sich anpassen.
 | **Rug-Analyst** | RugCheck-Bericht auswerten, Verkaufstest (Honeypot-Schutz) |
 | **Risk-Manager** | Positionsgröße, Limits, Not-Aus – hat Vetorecht |
 | **Executor** | Paper: echte Jupiter-Quotes + Sicherheitsabschlag · Live: Jupiter-Swap, lokal signiert, über eigenen RPC gesendet |
-| **Position-Manager** | überwacht offene Positionen, löst Ausstiege aus |
+| **Position-Manager** | überwacht offene Positionen, löst Ausstiege aus – mit Echtzeit-Kursen direkt aus der Blockchain (Helius, PumpSwap-Pools), sonst DexScreener alle 2 s |
 | **Analyst** | Statistik nach Ausstiegsgrund und Score, Vorschläge für die Einstellungen |
 
 ## Web-Oberfläche (Port 8080)
@@ -38,6 +38,9 @@ Alle Werte stehen in `config.toml` und lassen sich anpassen.
 * **Agenten:** Watchlist mit Entscheidung und Grund je Coin, Log aller Agenten
 * **Analyse:** Auswertung + Vorschläge
 * **Steuerung:** Pausieren, Fortsetzen, Not-Aus (alles verkaufen)
+
+Die Übersicht wird per WebSocket live vom Bot aktualisiert (bis zu 4×/s). Unter *Steuerung → Woher kommen die Daten?*
+steht, wie jede Information aktualisiert wird.
 
 Login über `WEB_USER`/`WEB_PASSWORD`. Die Oberfläche nicht offen ins Internet stellen – Zugriff am besten über Tailscale/WireGuard.
 

@@ -7,7 +7,9 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fastapi import Body, Depends, FastAPI, HTTPException, status
+import asyncio
+
+from fastapi import Body, Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
@@ -57,6 +59,7 @@ def create_app(bot: "Bot") -> FastAPI:
             p["value_sol"] = value
             p["unrealized_sol"] = value + (p["sol_received"] or 0) - p["size_sol"]
             p["unrealized_pct"] = p["unrealized_sol"] / p["size_sol"] * 100 if p["size_sol"] else 0
+            p["price"] = bot.price_info(p["mint"])
         return p
 
     def asset_version() -> str:
@@ -73,6 +76,9 @@ def create_app(bot: "Bot") -> FastAPI:
 
     @app.get("/api/summary")
     async def summary(_: None = Depends(auth)):
+        return await build_summary()
+
+    async def build_summary() -> dict:
         equity, cash = await bot.portfolio.equity()
         st = cached_stats()
         open_pos = [enrich(p) for p in db.open_positions(mode())]
@@ -87,9 +93,45 @@ def create_app(bot: "Bot") -> FastAPI:
             "total_return_pct": (equity / base - 1) * 100 if base else 0,
             "unrealized_sol": sum(p["unrealized_sol"] for p in open_pos),
             "open_count": len(open_pos), "min_score": bot.cfg.strategy.min_score,
+            "feed_enabled": bot.feed is not None, "feed_connected": bool(bot.feed and bot.feed.connected),
             "watchlist": db.one("SELECT COUNT(*) AS n FROM candidates WHERE status IN ('new','waiting')")["n"],
             "stats": st["gesamt"], "last24h": st["letzte_24h"],
         }
+
+    # ------------------------------------------------------------ Live-Push per WebSocket
+    ws_tokens: dict[str, float] = {}
+
+    @app.get("/api/ws-token")
+    def ws_token(_: None = Depends(auth)):
+        """Kurzlebiges Token, weil Browser beim WebSocket kein Login (Basic Auth) mitschicken."""
+        now = time.time()
+        for t in [t for t, exp in ws_tokens.items() if exp < now]:
+            ws_tokens.pop(t)
+        tok = secrets.token_urlsafe(24)
+        ws_tokens[tok] = now + 3600
+        return {"token": tok}
+
+    @app.websocket("/ws")
+    async def ws_stream(ws: WebSocket, token: str = ""):
+        if pw and ws_tokens.get(token, 0) < time.time():
+            await ws.close(code=4401)
+            return
+        await ws.accept()
+        last = 0.0
+        try:
+            while True:
+                try:
+                    await asyncio.wait_for(bot.ui_event.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
+                if time.monotonic() - last < 0.25:      # höchstens 4 Updates pro Sekunde
+                    await asyncio.sleep(0.25 - (time.monotonic() - last))
+                bot.ui_event.clear()
+                last = time.monotonic()
+                open_pos = [enrich(p) for p in db.open_positions(mode())]
+                await ws.send_json({"summary": await build_summary(), "open": open_pos})
+        except (WebSocketDisconnect, RuntimeError):
+            return
 
     @app.get("/api/positions")
     def positions(state: str = "open", limit: int = 200, _: None = Depends(auth)):

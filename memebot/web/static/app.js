@@ -50,14 +50,18 @@ function kpi(label, value, sub = "", c = "") {
 }
 
 async function loadSummary() {
-  const s = await api("/api/summary");
+  renderSummary(await api("/api/summary"));
+}
+
+function renderSummary(s) {
   lastSummary = s;
   const stale = s.last_cycle && s.now - s.last_cycle > 120;
   $("statusDot").className = "dot " + (s.killed ? "bad" : s.paused || stale ? "warn" : "ok");
   $("modeBadge").textContent = s.sim ? "SIMULATION" : s.mode.toUpperCase();
   $("modeBadge").className = "badge " + s.mode;
   $("statusLine").textContent = (s.killed ? "NOT-AUS aktiv · " : s.paused ? "pausiert · " : "") +
-    `${s.status} · letzter Zyklus vor ${s.last_cycle ? ago(s.last_cycle) : "–"} · Watchlist ${s.watchlist}`;
+    `${s.status} · letzter Zyklus vor ${s.last_cycle ? ago(s.last_cycle) : "–"} · Watchlist ${s.watchlist}` +
+    (wsLive ? " · ⚡ Live" : "");
   const st = s.stats;
   $("kpis").innerHTML =
     kpi("Kapital", sol(s.equity_sol, 3) + " SOL", "Kasse " + sol(s.cash_sol, 3)) +
@@ -118,11 +122,16 @@ function drawChart(cv, pts, baseline) {
   g.stroke();
 }
 
+function srcBadge(pr) {
+  if (!pr) return "";
+  return pr.source === "helius" ? `<span class="pos">⚡ live</span>` : `<span title="${esc(pr.note || "")}">DexScreener</span>`;
+}
+
 function posRow(p) {
   const open = p.status === "open";
   const v = open ? p.unrealized_sol : p.pnl_sol, vp = open ? p.unrealized_pct : p.pnl_pct;
   const meta = open
-    ? `seit ${ago(p.opened_at)} · Einsatz ${sol(p.size_sol)} · Score ${Math.round(p.score)}` +
+    ? `${srcBadge(p.price)} · seit ${ago(p.opened_at)} · Einsatz ${sol(p.size_sol)} · Score ${Math.round(p.score)}` +
       (p.tp_hits ? ` · TP ${p.tp_hits} verkauft: ${sol(p.sol_received)} SOL gesichert, Rest ${Math.round(p.tokens_remaining / p.tokens_total * 100)}%` : "")
     : `${dt(p.closed_at)} · ${esc(p.exit_reason)} · ${dur(p.opened_at, p.closed_at)} · Einsatz ${sol(p.size_sol)}`;
   return `<div class="row" data-id="${p.id}">
@@ -137,7 +146,10 @@ function bindRows(el) {
 }
 
 async function loadOpen() {
-  const rows = await api("/api/positions?state=open");
+  renderOpen(await api("/api/positions?state=open"));
+}
+
+function renderOpen(rows) {
   $("openList").innerHTML = rows.length ? rows.map(posRow).join("") : `<div class="empty">Keine offenen Positionen.</div>`;
   bindRows($("openList"));
 }
@@ -279,7 +291,22 @@ async function loadAnalysis() {
 }
 
 let settingsLoaded = false;
+function renderDataInfo() {
+  const s = lastSummary || {};
+  const feed = !s.feed_enabled ? "aus (kein Helius-Key)" : s.feed_connected ? "verbunden ✓" : "nicht verbunden – Rückfall auf DexScreener";
+  $("dataInfo").innerHTML = `
+    <div>Kurse offener Positionen</div><div><b>⚡ Live aus der Blockchain</b> (Helius, bei jedem Trade im Pool, ~0,5–1 s) für PumpSwap-Pools.
+      Andere Pools: DexScreener alle 2 s (DexScreener selbst hinkt einige Sekunden hinterher). Status: ${feed}</div>
+    <div>Stop-Loss / Take-Profit</div><div>werden bei jedem neuen Kurs sofort geprüft</div>
+    <div>Watchlist</div><div>DexScreener, jeder Kandidat alle 30 s</div>
+    <div>Neue Kandidaten</div><div>Graduations live (Helius + PumpPortal), GeckoTerminal/DexScreener-Listen jede Minute</div>
+    <div>Phasen- & Sicherheitscheck</div><div>GeckoTerminal-Kerzen und RugCheck, nur direkt vor einem Kauf</div>
+    <div>Diese Oberfläche</div><div>${wsLive ? "⚡ Live-Push vom Bot (WebSocket), bis zu 4×/s" : "Abfrage alle 2 s (Live-Verbindung nicht aktiv)"};
+      Kapitalverlauf: Punkt pro Minute + Live-Punkt</div>`;
+}
+
 async function loadControl() {
+  renderDataInfo();
   $("cfg").textContent = JSON.stringify(await api("/api/config"), null, 2);
   if (settingsLoaded) return;          // Eingaben beim Auto-Refresh nicht überschreiben
   const items = await api("/api/settings");
@@ -322,12 +349,30 @@ async function refresh() {
     $("statusLine").textContent = "Keine Verbindung zum Bot (" + e.message + ")";
   }
 }
+// ---------------------------------------------------------------- Live-Push vom Bot (WebSocket)
+let wsLive = false, ws = null;
+async function connectWs() {
+  try {
+    const { token } = await api("/api/ws-token");
+    ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws?token=" + token);
+    ws.onopen = () => { wsLive = true; };
+    ws.onmessage = (ev) => {
+      if (!$("modal").classList.contains("hidden")) return;
+      const d = JSON.parse(ev.data);
+      renderSummary(d.summary);
+      if (tab === "overview") { renderOpen(d.open); loadEquity(); }
+    };
+    ws.onclose = () => { wsLive = false; setTimeout(connectWs, 3000); };
+  } catch (e) { wsLive = false; setTimeout(connectWs, 5000); }
+}
+connectWs();
+
 refresh();
 // Übersicht alle 2 s (nur Datenbank-Lesen, belastet den Bot nicht), andere Tabs alle 5 s
 let tick = 0;
 setInterval(() => {
   tick++;
   if (document.hidden || !$("modal").classList.contains("hidden")) return;
-  if (tab === "overview" || tick % 5 === 0) refresh();
+  if ((tab === "overview" && !wsLive) || tick % 5 === 0) refresh();   // mit Live-Verbindung kommt die Übersicht per Push
 }, 2000);
 window.addEventListener("resize", () => tab === "overview" && loadEquity());
