@@ -86,10 +86,17 @@ async def check(cfg) -> None:
             raise RuntimeError("keine Pools erhalten")
         return f"{len(found)} Pools (neu + trendend)"
 
+    async def helius_ws():
+        from .sources.helius_migrations import probe as hprobe
+        if a.rpc_url.endswith("api-key="):
+            raise RuntimeError("HELIUS_API_KEY nicht gesetzt")
+        return await hprobe(a.rpc_url)
+
     async def pump():
         return await probe(a.pumpportal_ws)
 
-    checks = [("DexScreener", dex), ("GeckoTerminal", gecko), ("RugCheck", rug), ("Jupiter", jup), ("Helius/RPC", rpc), ("PumpPortal", pump)]
+    checks = [("DexScreener", dex), ("GeckoTerminal", gecko), ("RugCheck", rug), ("Jupiter", jup), ("Helius/RPC", rpc), ("Helius-WS", helius_ws),
+              ("PumpPortal", pump)]
     print(f"Konfiguration: {cfg['_source']}  Modus: {cfg.mode}\n")
     for name, fn in checks:
         try:

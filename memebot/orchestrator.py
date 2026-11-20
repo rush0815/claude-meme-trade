@@ -14,6 +14,7 @@ from .agents.rug_analyst import RugAnalyst
 from .agents.scout import Scout
 from .agents.strategist import Strategist
 from .models import Signal
+from .sources import helius_migrations
 from .sources.pumpportal import stream_migrations
 
 log = logging.getLogger("memebot")
@@ -136,6 +137,10 @@ class Bot:
         self.db.log("Orchestrator", f"Bot gestartet im Modus {self.ctx.mode.upper()}"
                     + (f", Wallet {self.wallet}" if self.wallet else ""))
         tasks = [asyncio.create_task(self.position_loop())]
+        if self.cfg.scout.get("use_helius_migrations", True) and self.ctx.rpc is not None:
+            tasks.append(asyncio.create_task(helius_migrations.stream_migrations(
+                self.ctx.rpc, self.cfg.api.rpc_url, self.scout.on_migration, self.stop,
+                on_status=lambda msg, lvl: self.db.log("Scout", msg, lvl))))
         if self.cfg.scout.use_pumpportal:
             tasks.append(asyncio.create_task(
                 stream_migrations(self.cfg.api.pumpportal_ws, self.scout.on_migration, self.stop,
