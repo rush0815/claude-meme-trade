@@ -122,7 +122,8 @@ function posRow(p) {
   const open = p.status === "open";
   const v = open ? p.unrealized_sol : p.pnl_sol, vp = open ? p.unrealized_pct : p.pnl_pct;
   const meta = open
-    ? `seit ${ago(p.opened_at)} · Einsatz ${sol(p.size_sol)} · Score ${Math.round(p.score)}${p.tp_hits ? " · TP " + p.tp_hits : ""}`
+    ? `seit ${ago(p.opened_at)} · Einsatz ${sol(p.size_sol)} · Score ${Math.round(p.score)}` +
+      (p.tp_hits ? ` · TP ${p.tp_hits} verkauft: ${sol(p.sol_received)} SOL gesichert, Rest ${Math.round(p.tokens_remaining / p.tokens_total * 100)}%` : "")
     : `${dt(p.closed_at)} · ${esc(p.exit_reason)} · ${dur(p.opened_at, p.closed_at)} · Einsatz ${sol(p.size_sol)}`;
   return `<div class="row" data-id="${p.id}">
     <div class="sym">${esc(p.symbol || p.mint.slice(0, 6))}</div>
@@ -175,7 +176,8 @@ async function showPosition(id) {
       <div>Status</div><div>${open ? "offen" : "geschlossen – " + esc(p.exit_reason)}</div>
       <div>Ergebnis</div><div class="${cls(open ? p.unrealized_sol : p.pnl_sol)}">${sol(open ? p.unrealized_sol : p.pnl_sol)} SOL (${pct(open ? p.unrealized_pct : p.pnl_pct)})</div>
       <div>Einsatz</div><div>${sol(p.size_sol)} SOL</div>
-      <div>Zurück erhalten</div><div>${sol(p.sol_received)} SOL</div>
+      <div>Zurück erhalten</div><div>${sol(p.sol_received)} SOL${open && p.tp_hits ? " (aus Teilverkäufen)" : ""}</div>
+      ${open ? `<div>Noch gehalten</div><div>${Math.round(p.tokens_remaining / p.tokens_total * 100)}% der Token, Wert ${sol(p.value_sol)} SOL</div>` : ""}
       <div>Einstieg / Hoch / Letzter</div><div>${(+p.entry_price).toExponential(3)} / ${(+p.high_price).toExponential(3)} / ${(+p.last_price).toExponential(3)}</div>
       <div>Eröffnet</div><div>${dt(p.opened_at)}${p.closed_at ? " · Dauer " + dur(p.opened_at, p.closed_at) : ""}</div>
       <div>Score</div><div>${Math.round(p.score)}</div>
