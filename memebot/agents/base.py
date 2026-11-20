@@ -19,6 +19,7 @@ class Ctx:
     rug: Any = None          # RugCheck
     jup: Any = None          # Jupiter
     rpc: Any = None          # SolanaRPC
+    gecko: Any = None        # GeckoTerminal
 
     @property
     def mode(self) -> str:

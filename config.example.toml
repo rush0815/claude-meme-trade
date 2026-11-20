@@ -16,12 +16,14 @@ jupiter_base = "https://api.jup.ag/swap/v1"
 jupiter_api_key = "${JUPITER_API_KEY}"     # leer = keyless (sehr langsam)
 jupiter_min_interval_s = 1.1                # Free-Plan: 1 Anfrage/Sekunde
 dexscreener_base = "https://api.dexscreener.com"
+geckoterminal_base = "https://api.geckoterminal.com/api/v2"
 rugcheck_base = "https://api.rugcheck.xyz/v1"
 pumpportal_ws = "wss://pumpportal.fun/api/data"
 
 [scout]
 use_pumpportal = true           # Graduations von pump.fun live mitlesen
 use_dexscreener_lists = true    # neue Profile + Boosts von DexScreener
+use_geckoterminal = true        # neue + trendende Solana-Pools (beste Quelle für graduierte Coins)
 min_age_min = 15                # ganz frische Launches meiden (Sniper/Rugs)
 max_age_min = 1440
 recheck_seconds = 30            # Kandidat erneut prüfen, wenn er noch nicht reif war

@@ -66,3 +66,20 @@ def test_rpc_token_balance_and_confirm():
     rpc = SolanaRPC("https://rpc", client=client("https://rpc", h))
     assert asyncio.run(rpc.token_balance_raw("OWNER", "MINT")) == 1000
     assert asyncio.run(rpc.confirm("SIG", 5)) is True
+
+
+def test_geckoterminal_mints_skip_bonding_curve():
+    from memebot.sources.geckoterminal import GeckoTerminal
+
+    def pool(mint, dex):
+        return {"relationships": {"base_token": {"data": {"id": f"solana_{mint}"}},
+                                  "dex": {"data": {"id": dex}}}}
+
+    def h(req):
+        assert req.url.path.startswith("/api/v2/networks/solana/")
+        return httpx.Response(200, json={"data": [pool("AAApump", "pumpswap"), pool("BBBpump", "pump-fun"),
+                                                  pool(SOL_MINT, "raydium")]})
+    gt = GeckoTerminal(client=client("https://api.geckoterminal.com/api/v2", h))
+    found = asyncio.run(gt.latest_mints())
+    mints = {m for m, _ in found}
+    assert mints == {"AAApump"} and len(found) == 4      # 4 Abfragen, je 1 Treffer
