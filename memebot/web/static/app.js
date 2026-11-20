@@ -531,13 +531,13 @@ function renderCredit(c) {
 
 function renderAIUsage(u) {
   renderCredit(u.credit);
-  const box = (label, a) => kpi(label, usd(a.cost, 3), `${a.calls} ${L("Aufrufe", "calls")} · ${num(a.inp)} / ${num(a.out)} Tok.` +
+  const box = (label, a) => kpi(label, usd(a.cost, 3), `${a.calls} ${L("Aufrufe", "calls")} · ${num(a.inp)} ${L("Tokens rein", "tokens in")} · ${num(a.out)} ${L("raus", "out")}` +
     (a.searches ? ` · ${a.searches} ${L("Suchen", "searches")}` : "") + (a.errors ? ` · ${a.errors} ${L("Fehler", "errors")}` : ""));
   $("aiKpis").innerHTML = box(L("Heute (UTC)", "Today (UTC)"), u.today) + box(L("7 Tage", "7 days"), u.week) +
     box(L("Gesamt", "Total"), u.total) +
     kpi(L("Ø pro Aufruf", "Avg per call"), u.total.calls ? usd(u.total.cost / u.total.calls, 5) : "–", L("Kosten", "cost"));
-  $("aiDaily").innerHTML = `<tr><th>${L("Tag", "Day")}</th><th class="num">${L("Aufrufe", "Calls")}</th><th class="num">Input</th>
-    <th class="num">Output</th><th class="num">${L("Suchen", "Searches")}</th><th class="num">${L("Kosten", "Cost")}</th></tr>` +
+  $("aiDaily").innerHTML = `<tr><th>${L("Tag", "Day")}</th><th class="num">${L("Aufrufe", "Calls")}</th><th class="num">${L("Tokens rein", "Tokens in")}</th>
+    <th class="num">${L("Tokens raus", "Tokens out")}</th><th class="num">${L("Suchen", "Searches")}</th><th class="num">${L("Kosten", "Cost")}</th></tr>` +
     (u.daily.map((r) => `<tr><td>${esc(r.day)}</td><td class="num">${r.calls}</td><td class="num">${num(r.inp)}</td>
       <td class="num">${num(r.out)}</td><td class="num">${r.searches || 0}</td><td class="num">${usd(r.cost)}</td></tr>`).join("")
       || `<tr><td colspan="6" class="muted">${L("noch keine Aufrufe", "no calls yet")}</td></tr>`);
@@ -551,7 +551,7 @@ function renderCalls(rows, total) {
     (rows.map((r) => `<tr><td>${dt(r.ts)}<br><span class="muted">${esc(r.symbol || "–")}</span></td>
       <td class="num">${r.score != null ? Math.round(r.score) : "–"}</td>
       <td style="white-space:normal">${r.ok ? esc(r.verdict || "") : `<span class="neg">${esc(r.error || L("Fehler", "error"))}</span>`}</td>
-      <td class="num">${usd(r.cost_usd, 5)}<br><span class="muted">${num(r.input_tokens)}/${num(r.output_tokens)} Tok.${r.searches ? " · " + r.searches + L(" Suche", " search") : ""}</span></td></tr>`).join("")
+      <td class="num">${usd(r.cost_usd, 5)}<br><span class="muted">${num(r.input_tokens)} ${L("rein", "in")} · ${num(r.output_tokens)} ${L("raus", "out")}${r.searches ? " · " + r.searches + L(" Suche", " search") : ""}</span></td></tr>`).join("")
       || `<tr><td colspan="4" class="muted">${L("noch keine Aufrufe", "no calls yet")}</td></tr>`) +
     (rows.length ? `<tr><td colspan="3"><b>${L(`Summe (${rows.length} Aufrufe${total && total.calls > rows.length ? " von " + total.calls : ""})`,
       `Total (${rows.length} calls${total && total.calls > rows.length ? " of " + total.calls : ""})`)}</b></td><td class="num"><b>${usd(sum, 4)}</b></td></tr>` : "");
