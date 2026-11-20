@@ -145,10 +145,10 @@ const PATTERNS_EN = [
   [/^Noch zu wenig Daten \((\d+) Trades\)\. Aussagekräftig wird es ab ca\. 30–50 Trades\.$/, "Not enough data yet ($1 trades). Meaningful from about 30–50 trades."],
   [/^Profit-Faktor (.+) < 1: Die Strategie verliert gerade Geld\. Nicht live schalten\.$/, "Profit factor $1 < 1: the strategy is losing money. Do not go live."],
   [/^Profit-Faktor (.+) über (\d+) Trades: (.+)$/, "Profit factor $1 over $2 trades: candidate for a careful live test with a small wallet."],
-  [/^Über die Hälfte der Trades endet im Stop-Loss(.+)$/, "More than half of the trades end in the stop-loss: make entries stricter (raise min_score, raise min_buy_sell_ratio_m5 or lower max_change_m5_pct)."],
-  [/^Trades, die ins Zeitlimit laufen, verlieren im Schnitt(.+)$/, "Trades that hit the time limit lose on average: shorten max_hold_min."],
-  [/^Trailing-Stops sichern kaum Gewinn(.+)$/, "Trailing stops lock in little profit: widen trailing_stop_pct or raise trailing_activate_pct."],
-  [/^Score-Bereich (.+) verliert, höhere Scores gewinnen: min_score auf (.+) anheben\.$/, "Score range $1 loses, higher scores win: raise min_score to $2."],
+  [/^Über die Hälfte der Trades endet im Stop-Loss(.+)$/, "More than half of the trades end in the stop-loss: make entries stricter – under Configuration raise “Buy threshold (score)” or “Minimum buy/sell ratio (5 min)”, or lower “FOMO limit: max. price rise in 5 min (%)”."],
+  [/^Trades, die ins Zeitlimit laufen, verlieren im Schnitt(.+)$/, "Trades that hit the time limit lose on average: shorten “Time limit in minutes” under Configuration."],
+  [/^Trailing-Stops sichern kaum Gewinn(.+)$/, "Trailing stops lock in little profit: under Configuration widen “Trailing stop: distance from high in %” or raise “Trailing stop active from profit in %”."],
+  [/^Score-Bereich (.+) verliert, höhere Scores gewinnen: .* auf (.+) anheben\.$/, "Score range $1 loses, higher scores win: raise “Buy threshold (score)” under Configuration to $2."],
   [/^Keine Auffälligkeiten – weiter Daten sammeln\.$/, "Nothing unusual – keep collecting data."],
 ];
 function tr(s) {

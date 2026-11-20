@@ -80,20 +80,22 @@ class Analyst(Agent):
             tips.append(f"Profit-Faktor {pf} über {n} Trades: Kandidat für einen vorsichtigen Live-Test mit kleiner Wallet.")
         sl = s["nach_ausstieg"].get("Stop-Loss", {}).get("anzahl", 0)
         if sl / n > 0.55:
-            tips.append("Über die Hälfte der Trades endet im Stop-Loss: Einstieg strenger machen "
-                        "(min_score erhöhen, min_buy_sell_ratio_m5 erhöhen oder max_change_m5_pct senken).")
+            tips.append("Über die Hälfte der Trades endet im Stop-Loss: Einstieg strenger machen – unter Konfiguration "
+                        "„Kaufschwelle (Score)“ oder „Mindest-Verhältnis Käufe/Verkäufe (5 min)“ erhöhen bzw. "
+                        "„FOMO-Grenze: max. Kursanstieg in 5 min (%)“ senken.")
         tl = s["nach_ausstieg"].get("Zeitlimit")
         if tl and tl["anzahl"] >= 5 and tl["avg_pct"] < 0:
-            tips.append("Trades, die ins Zeitlimit laufen, verlieren im Schnitt: max_hold_min verkürzen.")
+            tips.append("Trades, die ins Zeitlimit laufen, verlieren im Schnitt: unter Konfiguration "
+                        "„Zeitlimit in Minuten“ verkürzen.")
         tr = s["nach_ausstieg"].get("Trailing-Stop")
         if tr and tr["anzahl"] >= 5 and tr["avg_pct"] < 10:
-            tips.append("Trailing-Stops sichern kaum Gewinn: trailing_stop_pct etwas weiter stellen oder "
-                        "trailing_activate_pct erhöhen.")
+            tips.append("Trailing-Stops sichern kaum Gewinn: unter Konfiguration „Trailing-Stop: Abstand vom Hoch in %“ "
+                        "etwas größer stellen oder „Trailing-Stop aktiv ab Gewinn in %“ erhöhen.")
         buckets = [(k, v) for k, v in s["nach_score"].items() if v["anzahl"] >= 8]
         for i, (k, v) in enumerate(buckets[:-1]):
             better = [b for _, b in buckets[i + 1:] if b["pnl_sol"] > 0]
             if v["pnl_sol"] < 0 and better:
-                tips.append(f"Score-Bereich {k} verliert, höhere Scores gewinnen: min_score auf "
-                            f"{k.split('–')[1]} anheben.")
+                tips.append(f"Score-Bereich {k} verliert, höhere Scores gewinnen: unter Konfiguration "
+                            f"„Kaufschwelle (Score)“ auf {k.split('–')[1]} anheben.")
                 break
         return tips or ["Keine Auffälligkeiten – weiter Daten sammeln."]
