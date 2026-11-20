@@ -32,12 +32,25 @@ class Section(dict):
         return Section(v) if isinstance(v, dict) and not isinstance(v, Section) else v
 
 
+def _merge(base: dict, over: dict) -> dict:
+    out = dict(base)
+    for k, v in over.items():
+        out[k] = _merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
 def load_config(path: str | os.PathLike | None = None) -> Section:
+    """Lädt config.example.toml als Standardwerte und legt die eigene config.toml darüber.
+    So stehen neue Einstellungen nach einem Update automatisch zur Verfügung."""
+    example = ROOT / "config.example.toml"
     p = Path(path or os.environ.get("MEMEBOT_CONFIG") or ROOT / "config.toml")
     if not p.exists():
-        p = ROOT / "config.example.toml"
-    with open(p, "rb") as f:
+        p = example
+    with open(example, "rb") as f:
         raw = tomllib.load(f)
+    if p != example:
+        with open(p, "rb") as f:
+            raw = _merge(raw, tomllib.load(f))
     cfg = Section(_subst(raw))
     db = Path(cfg["db_path"])
     if not db.is_absolute():

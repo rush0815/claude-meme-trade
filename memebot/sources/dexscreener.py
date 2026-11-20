@@ -7,8 +7,8 @@ from .http import RateLimitedClient
 
 class DexScreener:
     def __init__(self, base: str = "https://api.dexscreener.com", client: RateLimitedClient | None = None):
-        # Profile/Boosts: 60 req/min, Token-Paare: 300 req/min -> 1 s Abstand ist sicher
-        self.http = client or RateLimitedClient(base, min_interval_s=1.0)
+        # Token-Paare: 300 req/min (5/s). Profile/Boosts: 60 req/min, werden aber nur 2x pro Minute abgefragt.
+        self.http = client or RateLimitedClient(base, min_interval_s=0.25)
 
     async def latest_mints(self) -> list[tuple[str, str]]:
         """(mint, quelle) aus neuen Token-Profilen und Boosts."""

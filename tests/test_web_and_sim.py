@@ -25,9 +25,13 @@ def test_simulation_cycles_produce_trades(tmp_path):
         for _ in range(150):
             bot.ctx.dex._last = 0          # Markt bei jedem Zyklus weiterlaufen lassen
             await bot.cycle()
+            await bot.position_tick()
     asyncio.run(go())
     n = bot.db.one("SELECT COUNT(*) AS n FROM positions")["n"]
     assert n > 0
+    assert bot.db.one("SELECT COUNT(*) AS n FROM positions WHERE status='closed'")["n"] > 0
+    c = bot.db.one("SELECT * FROM candidates WHERE details IS NOT NULL LIMIT 1")
+    assert c and c["score"] is not None
     cash = bot.db.get("paper_cash")
     assert 0 < cash < 2
 

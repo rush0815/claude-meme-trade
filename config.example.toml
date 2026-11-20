@@ -5,7 +5,8 @@
 # "paper" = Spielgeld mit echten Kursen, "live" = echte Trades
 mode = "paper"
 paper_start_sol = 1.0
-poll_seconds = 15
+poll_seconds = 15              # Hauptzyklus: Watchlist, Käufe, Statistik
+position_poll_seconds = 3     # offene Positionen (Stop-Loss etc.) – eigene schnelle Schleife
 db_path = "data/memebot.db"
 
 [api]
@@ -23,7 +24,7 @@ use_pumpportal = true           # Graduations von pump.fun live mitlesen
 use_dexscreener_lists = true    # neue Profile + Boosts von DexScreener
 min_age_min = 15                # ganz frische Launches meiden (Sniper/Rugs)
 max_age_min = 1440
-recheck_seconds = 60            # Kandidat erneut prüfen, wenn er noch nicht reif war
+recheck_seconds = 30            # Kandidat erneut prüfen, wenn er noch nicht reif war
 max_watchlist = 400
 
 [filters]
