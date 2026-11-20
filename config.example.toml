@@ -5,7 +5,7 @@
 # "paper" = Spielgeld mit echten Kursen, "live" = echte Trades
 mode = "paper"
 paper_start_sol = 1.0
-poll_seconds = 15              # Hauptzyklus: Watchlist, Käufe, Statistik
+poll_seconds = 5               # Hauptzyklus: Watchlist, Käufe, Statistik
 live_prices = true            # Echtzeit-Kurse offener Positionen über Helius (PumpSwap-Pools)
 position_poll_seconds = 2     # offene Positionen (Stop-Loss etc.) – eigene schnelle Schleife
 db_path = "data/memebot.db"

@@ -26,6 +26,9 @@ EDITABLE: dict[str, tuple[type, float, float, str]] = {
     "exit.trailing_stop_pct": (float, 2, 90, "Trailing-Stop: Abstand vom Hoch in %"),
     "exit.max_hold_min": (float, 1, 1440, "Zeitlimit in Minuten"),
     "strategy.min_score": (float, 0, 100, "Kaufschwelle (Score)"),
+    "scout.max_age_min": (float, 30, 2880, "Coins höchstens so alt (Minuten)"),
+    "scout.recheck_seconds": (float, 5, 600, "Watchlist: Coin erneut prüfen nach (Sekunden)"),
+    "bot.poll_seconds": (float, 2, 120, "Hauptzyklus (Sekunden)"),
     "risk.position_pct": (float, 0.005, 0.25, "Positionsgröße (Anteil vom Kapital)"),
     "risk.max_open_positions": (int, 1, 20, "max. offene Positionen"),
 }
@@ -47,6 +50,9 @@ def current(cfg) -> dict[str, Any]:
         "exit.trailing_stop_pct": e["trailing_stop_pct"],
         "exit.max_hold_min": e["max_hold_min"],
         "strategy.min_score": cfg["strategy"]["min_score"],
+        "scout.max_age_min": cfg["scout"]["max_age_min"],
+        "scout.recheck_seconds": cfg["scout"]["recheck_seconds"],
+        "bot.poll_seconds": cfg["poll_seconds"],
         "risk.position_pct": cfg["risk"]["position_pct"],
         "risk.max_open_positions": cfg["risk"]["max_open_positions"],
     }
@@ -79,7 +85,9 @@ def apply(cfg, values: dict[str, Any]) -> None:
     cur.update(values)
     for k, v in values.items():
         sec, key = k.split(".", 1)
-        if not key.startswith("tp"):
+        if sec == "bot":
+            cfg[key] = v
+        elif not key.startswith("tp"):
             cfg[sec][key] = v
     levels = [[cur["exit.tp1_pct"], cur["exit.tp1_fraction"]], [cur["exit.tp2_pct"], cur["exit.tp2_fraction"]]]
     cfg["exit"]["take_profit_levels"] = [lv for lv in sorted(levels) if lv[1] > 0]
@@ -95,7 +103,15 @@ EXIT_V2 = {
 }
 
 
+# Einmalig: schnellere Watchlist-Takte (alte config.toml hatte 60 s / 15 s / 24 h)
+TIMING_V3 = {"scout.recheck_seconds": 30, "bot.poll_seconds": 5, "scout.max_age_min": 480}
+
+
 def load_into(cfg, db) -> None:
+    if not db.get("migration_timing_v3"):
+        db.set("overrides", {**(db.get("overrides") or {}), **TIMING_V3})
+        db.set("migration_timing_v3", True)
+        db.log("Orchestrator", "Takte umgestellt: Watchlist alle 30 s, Hauptzyklus 5 s, max. Alter 8 h")
     if not db.get("migration_exit_v2"):
         db.set("overrides", {**(db.get("overrides") or {}), **EXIT_V2})
         db.set("migration_exit_v2", True)

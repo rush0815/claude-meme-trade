@@ -103,3 +103,13 @@ def test_settings_mode_choice(tmp_path):
     assert c.post("/api/settings", json={"exit.mode": "simple", "exit.simple_take_profit_pct": 35}).status_code == 200
     assert bot.cfg["exit"]["mode"] == "simple" and bot.cfg["exit"]["simple_take_profit_pct"] == 35
     assert c.post("/api/settings", json={"exit.mode": "quatsch"}).status_code == 400
+
+
+def test_timing_migration_and_ui_edit(tmp_path):
+    bot = make_bot(tmp_path)
+    assert bot.cfg["scout"]["recheck_seconds"] == 30 and bot.cfg["poll_seconds"] == 5
+    c = TestClient(create_app(bot))
+    assert c.post("/api/settings", json={"bot.poll_seconds": 8, "scout.recheck_seconds": 20}).status_code == 200
+    assert bot.cfg["poll_seconds"] == 8 and bot.cfg["scout"]["recheck_seconds"] == 20
+    bot2 = make_bot(tmp_path)                      # Migration läuft nicht erneut, eigene Werte bleiben
+    assert bot2.cfg["poll_seconds"] == 8
