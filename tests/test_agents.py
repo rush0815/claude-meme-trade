@@ -229,3 +229,15 @@ def test_default_exit_ladder_is_consistent(ctx):
     assert e["breakeven_activate_pct"] < tp1 < e["trailing_activate_pct"]
     # frühester Trailing-Ausstieg liegt im Plus und über dem Break-even-Boden
     assert (1 + e["trailing_activate_pct"] / 100) * (1 - e["trailing_stop_pct"] / 100) - 1 > e["breakeven_floor_pct"] / 100
+
+
+def test_simple_exit_mode(ctx):
+    ctx.cfg["exit"].update(mode="simple", simple_take_profit_pct=25, breakeven_activate_pct=25)
+    pm, pid = open_pos(ctx)
+    entry = ctx.db.position(pid)["entry_price"]
+    run(pm.tick({"M1": good_market(price_sol=entry * 1.20)}))    # +20 %: noch nichts
+    run(pm.tick({"M1": good_market(price_sol=entry * 1.05)}))    # zurück: kein Break-even im Einfach-Modus
+    assert ctx.db.position(pid)["status"] == "open"
+    run(pm.tick({"M1": good_market(price_sol=entry * 1.26)}))
+    p = ctx.db.position(pid)
+    assert p["status"] == "closed" and p["exit_reason"].startswith("Take-Profit") and p["tokens_remaining"] == 0

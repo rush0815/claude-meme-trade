@@ -79,6 +79,9 @@ cooldown_hours = 12              # gleichen Coin nicht direkt wieder kaufen
 #   +50 %  erreicht -> Trailing-Stop aktiv: Rest verkaufen, wenn 20 % unter dem Hoch (frühestens bei +20 %)
 #   +80 %  Take-Profit 2: noch ⅓ verkaufen
 #   2 h    Zeitlimit
+# "ladder" = Leiter wie oben, "simple" = nur ein Take-Profit + Stop-Loss (+ Zeitlimit)
+mode = "ladder"
+simple_take_profit_pct = 30
 stop_loss_pct = 20
 breakeven_activate_pct = 25
 breakeven_floor_pct = 3

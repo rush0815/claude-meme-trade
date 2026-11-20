@@ -177,9 +177,11 @@ def create_app(bot: "Bot") -> FastAPI:
 
     @app.get("/api/settings")
     def get_settings(_: None = Depends(auth)):
-        from ..overrides import EDITABLE, current
+        from ..overrides import CHOICES, EDITABLE, current
         cur = current(bot.cfg)
-        return [{"key": k, "label": v[3], "min": v[1], "max": v[2], "value": cur[k]} for k, v in EDITABLE.items()]
+        items = [{"key": k, "label": lbl, "options": opts, "value": cur[k]} for k, (opts, lbl) in CHOICES.items()]
+        return items + [{"key": k, "label": v[3], "min": v[1], "max": v[2], "value": cur[k]}
+                        for k, v in EDITABLE.items()]
 
     @app.post("/api/settings")
     def set_settings(values: dict = Body(...), _: None = Depends(auth)):

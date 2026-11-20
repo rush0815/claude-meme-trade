@@ -271,14 +271,24 @@ async function loadControl() {
   $("cfg").textContent = JSON.stringify(await api("/api/config"), null, 2);
   if (settingsLoaded) return;          // Eingaben beim Auto-Refresh nicht überschreiben
   const items = await api("/api/settings");
-  $("settingsForm").innerHTML = items.map((it) => `<label for="s_${esc(it.key)}">${esc(it.label)}</label>
-    <input id="s_${esc(it.key)}" data-key="${esc(it.key)}" type="number" inputmode="decimal" step="any"
-      min="${it.min}" max="${it.max}" value="${it.value}">`).join("");
+  $("settingsForm").innerHTML = items.map((it) => `<label for="s_${esc(it.key)}">${esc(it.label)}</label>` + (it.options
+    ? `<select id="s_${esc(it.key)}" data-key="${esc(it.key)}">${Object.entries(it.options).map(([v, l]) =>
+        `<option value="${esc(v)}" ${v === it.value ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`
+    : `<input id="s_${esc(it.key)}" data-key="${esc(it.key)}" type="number" inputmode="decimal" step="any"
+      min="${it.min}" max="${it.max}" value="${it.value}">`)).join("");
   settingsLoaded = true;
+  const modeSel = $("s_exit.mode");
+  const syncMode = () => document.querySelectorAll("#settingsForm input").forEach((i) => {
+    const k = i.dataset.key, simple = modeSel.value === "simple";
+    const ladderOnly = /tp[12]_|trailing|breakeven/.test(k), simpleOnly = k.includes("simple_");
+    const hide = (simple && ladderOnly) || (!simple && simpleOnly);
+    i.style.display = i.previousElementSibling.style.display = hide ? "none" : "";
+  });
+  modeSel.onchange = syncMode; syncMode();
 }
 $("saveSettings").onclick = async () => {
   const body = {};
-  document.querySelectorAll("#settingsForm input").forEach((i) => body[i.dataset.key] = i.value);
+  document.querySelectorAll("#settingsForm input, #settingsForm select").forEach((i) => body[i.dataset.key] = i.value);
   const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json();
   $("settingsMsg").textContent = r.ok ? "Gespeichert ✓" : "Fehler: " + (j.detail || r.status);
