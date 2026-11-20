@@ -14,7 +14,7 @@ Solana-Meme-Coin-Bot mit mehreren zusammenarbeitenden Agenten und einer Web-Ober
 | Sicherheit | Mint- und Freeze-Authority entzogen, ≥ 80 % LP gelockt/verbrannt, Top-10-Holder ≤ 35 %, keine „danger“-Risiken bei RugCheck, Verkaufstest über Jupiter |
 | Einstieg | Score ≥ 65 aus Kaufdruck, Volumen-Beschleunigung, Momentum (ohne FOMO-Spitzen), Trend, Beteiligung, Liquidität/Bewertung |
 | Größe | 3 % des Kapitals (0,75×–1,25× je nach Score), max. 4 Positionen |
-| Ausstieg | Stop-Loss −20 %, Teilverkäufe bei +40 % und +100 %, Rest mit Trailing-Stop (−18 % vom Hoch, ab +30 %), Zeitlimit 3 h, sofort raus bei Liquiditätseinbruch |
+| Ausstieg | Stop-Loss −20 %, Break-even-Stop ab +25 % (Ausstieg bei +3 %), Teilverkäufe bei +30 % und +80 %, Rest mit Trailing-Stop (−20 % vom Hoch, ab +50 %), Zeitlimit 2 h, sofort raus bei Liquiditätseinbruch – alles in der Web-UI änderbar |
 | Schutz | Tagesverlust-Limit 10 %, automatischer Not-Aus bei 30 % Drawdown |
 
 Alle Werte stehen in `config.toml` und lassen sich anpassen.

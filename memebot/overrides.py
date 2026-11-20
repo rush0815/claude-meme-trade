@@ -10,6 +10,8 @@ from typing import Any
 # Schlüssel -> (Typ, min, max, Beschreibung)
 EDITABLE: dict[str, tuple[type, float, float, str]] = {
     "exit.stop_loss_pct": (float, 3, 90, "Stop-Loss in %"),
+    "exit.breakeven_activate_pct": (float, 0, 1000, "Break-even-Stop aktiv ab Gewinn in % (0 = aus)"),
+    "exit.breakeven_floor_pct": (float, -10, 100, "Break-even-Stop: verkaufen bei Gewinn in %"),
     "exit.tp1_pct": (float, 5, 1000, "Take-Profit 1: Gewinn in %"),
     "exit.tp1_fraction": (float, 0, 1, "Take-Profit 1: Anteil verkaufen (0–1)"),
     "exit.tp2_pct": (float, 5, 5000, "Take-Profit 2: Gewinn in %"),
@@ -29,6 +31,8 @@ def current(cfg) -> dict[str, Any]:
     tp = lambda i, j, d: lv[i][j] if len(lv) > i else d  # noqa: E731
     return {
         "exit.stop_loss_pct": e["stop_loss_pct"],
+        "exit.breakeven_activate_pct": e.get("breakeven_activate_pct", 0),
+        "exit.breakeven_floor_pct": e.get("breakeven_floor_pct", 3),
         "exit.tp1_pct": tp(0, 0, 40), "exit.tp1_fraction": tp(0, 1, 0.33),
         "exit.tp2_pct": tp(1, 0, 100), "exit.tp2_fraction": tp(1, 1, 0.33),
         "exit.trailing_activate_pct": e["trailing_activate_pct"],

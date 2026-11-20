@@ -72,12 +72,21 @@ sol_reserve = 0.03               # für Gebühren stehen lassen
 cooldown_hours = 12              # gleichen Coin nicht direkt wieder kaufen
 
 [exit]
+# Zusammenspiel (Gewinn bezogen auf den Einstieg inkl. Gebühren):
+#   −20 %  Stop-Loss (alles)
+#   +25 %  erreicht -> Break-even-Stop: fällt der Kurs zurück auf +3 %, wird alles verkauft
+#   +30 %  Take-Profit 1: ⅓ verkaufen
+#   +50 %  erreicht -> Trailing-Stop aktiv: Rest verkaufen, wenn 20 % unter dem Hoch (frühestens bei +20 %)
+#   +80 %  Take-Profit 2: noch ⅓ verkaufen
+#   2 h    Zeitlimit
 stop_loss_pct = 20
+breakeven_activate_pct = 25
+breakeven_floor_pct = 3
 # [Gewinn in %, Anteil der ursprünglichen Menge]
-take_profit_levels = [[40, 0.33], [100, 0.33]]
-trailing_activate_pct = 30
-trailing_stop_pct = 18
-max_hold_min = 180
+take_profit_levels = [[30, 0.33], [80, 0.33]]
+trailing_activate_pct = 50
+trailing_stop_pct = 20
+max_hold_min = 120
 liquidity_drop_factor = 0.6      # Liquidität < 60 % vom Einstieg -> raus
 
 [execution]

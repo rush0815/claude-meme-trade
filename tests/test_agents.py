@@ -151,6 +151,8 @@ def test_stop_loss(ctx):
 
 
 def test_take_profit_then_trailing(ctx):
+    ctx.cfg["exit"].update(take_profit_levels=[[40, 0.33], [100, 0.33]], trailing_activate_pct=30,
+                           trailing_stop_pct=18, breakeven_activate_pct=0)
     pm, pid = open_pos(ctx)
     entry = ctx.db.position(pid)["entry_price"]
     run(pm.tick({"M1": good_market(price_sol=entry * 1.45)}))
@@ -207,3 +209,23 @@ def test_phase_ignores_single_wick(ctx):
 def test_prefilter_rejects_6h_downtrend(ctx):
     v = Strategist(ctx).prefilter(good_market(change_h6=-60))
     assert not v.ok and "Hype vorbei" in v.reason
+
+
+def test_breakeven_stop(ctx):
+    ctx.cfg["exit"].update(breakeven_activate_pct=25, breakeven_floor_pct=3, take_profit_levels=[[30, 0.33]],
+                           trailing_activate_pct=50)
+    pm, pid = open_pos(ctx)
+    entry = ctx.db.position(pid)["entry_price"]
+    run(pm.tick({"M1": good_market(price_sol=entry * 1.27)}))    # +27 %: Break-even scharf, noch kein TP
+    assert ctx.db.position(pid)["status"] == "open"
+    run(pm.tick({"M1": good_market(price_sol=entry * 1.02)}))    # zurück auf +2 %
+    p = ctx.db.position(pid)
+    assert p["status"] == "closed" and p["exit_reason"] == "Break-even-Stop"
+
+
+def test_default_exit_ladder_is_consistent(ctx):
+    e = ctx.cfg["exit"]
+    tp1 = e["take_profit_levels"][0][0]
+    assert e["breakeven_activate_pct"] < tp1 < e["trailing_activate_pct"]
+    # frühester Trailing-Ausstieg liegt im Plus und über dem Break-even-Boden
+    assert (1 + e["trailing_activate_pct"] / 100) * (1 - e["trailing_stop_pct"] / 100) - 1 > e["breakeven_floor_pct"] / 100
