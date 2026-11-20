@@ -23,6 +23,7 @@ def build(cfg, simulate: bool = False) -> Bot:
         ctx = Ctx(cfg=cfg, db=db, dex=SimDex(world), rug=SimRug(world), jup=SimJupiter(world), rpc=None)
     else:
         from .sources.dexscreener import DexScreener
+        from .sources.geckoterminal import GeckoTerminal
         from .sources.jupiter import Jupiter
         from .sources.rugcheck import RugCheck
         from .sources.solana_rpc import SolanaRPC
@@ -31,7 +32,8 @@ def build(cfg, simulate: bool = False) -> Bot:
         rpc_url = "" if a.rpc_url.endswith("api-key=") else a.rpc_url   # kein Key gesetzt
         ctx = Ctx(cfg=cfg, db=db, dex=DexScreener(a.dexscreener_base), rug=RugCheck(a.rugcheck_base),
                   jup=Jupiter(a.jupiter_base, a.jupiter_api_key, a.jupiter_min_interval_s),
-                  rpc=SolanaRPC(rpc_url) if rpc_url else None)
+                  rpc=SolanaRPC(rpc_url) if rpc_url else None,
+                  gecko=GeckoTerminal(a.get("geckoterminal_base", "https://api.geckoterminal.com/api/v2")))
         if cfg.mode == "live" and ctx.rpc is None:
             raise SystemExit("Live-Modus braucht eine RPC-URL (HELIUS_API_KEY setzen).")
     return Bot(ctx)
@@ -77,10 +79,17 @@ async def check(cfg) -> None:
         slot = await SolanaRPC(a.rpc_url).call("getSlot")
         return f"Slot {slot}"
 
+    async def gecko():
+        from .sources.geckoterminal import GeckoTerminal
+        found = await GeckoTerminal(a.get("geckoterminal_base", "https://api.geckoterminal.com/api/v2")).latest_mints()
+        if not found:
+            raise RuntimeError("keine Pools erhalten")
+        return f"{len(found)} Pools (neu + trendend)"
+
     async def pump():
         return await probe(a.pumpportal_ws)
 
-    checks = [("DexScreener", dex), ("RugCheck", rug), ("Jupiter", jup), ("Helius/RPC", rpc), ("PumpPortal", pump)]
+    checks = [("DexScreener", dex), ("GeckoTerminal", gecko), ("RugCheck", rug), ("Jupiter", jup), ("Helius/RPC", rpc), ("PumpPortal", pump)]
     print(f"Konfiguration: {cfg['_source']}  Modus: {cfg.mode}\n")
     for name, fn in checks:
         try:

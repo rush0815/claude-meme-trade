@@ -15,15 +15,23 @@ class Scout(Agent):
             self.log("Neue Graduation entdeckt", mint=mint)
 
     async def discover_lists(self) -> int:
-        if not self.cfg.scout.use_dexscreener_lists:
-            return 0
-        new = 0
-        for mint, src in await self.ctx.dex.latest_mints():
-            if self.db.upsert_candidate(mint, src):
-                new += 1
-        if new:
-            self.log(f"{new} neue Kandidaten von DexScreener")
-        return new
+        sources = []
+        if self.cfg.scout.use_dexscreener_lists:
+            sources.append(("DexScreener", self.ctx.dex))
+        if self.cfg.scout.get("use_geckoterminal", True) and getattr(self.ctx, "gecko", None) is not None:
+            sources.append(("GeckoTerminal", self.ctx.gecko))
+        total = 0
+        for label, src in sources:
+            try:
+                found = await src.latest_mints()
+            except Exception as e:
+                self.log(f"{label} nicht erreichbar: {e}", "warn")
+                continue
+            new = sum(1 for mint, s in found if self.db.upsert_candidate(mint, s))
+            if new:
+                self.log(f"{new} neue Kandidaten von {label}")
+            total += new
+        return total
 
     async def due(self) -> list[tuple[dict, Market | None]]:
         sc = self.cfg.scout
