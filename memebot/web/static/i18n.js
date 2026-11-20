@@ -141,6 +141,7 @@ const PATTERNS_EN = [
   [/^KI-Einstellungen geändert: (.+)$/, "AI settings changed: $1"],
   [/^Einstellungs-Vorschlag #(\d+): (\d+) Änderung\(en\), Vertrauen (\w+) \((.+) ct\)$/, "Settings suggestion #$1: $2 change(s), confidence $3 ($4 ct)"],
   [/^Einstellungs-Vorschlag #(\d+) übernommen: (.+)$/, "Settings suggestion #$1 applied: $2"],
+  [/^Einstellungs-Vorschlag #(\d+) rückgängig gemacht: (.+)$/, "Settings suggestion #$1 undone: $2"],
   [/^KI aus$/, "AI analyst switched off"], [/^KI ohne API-Key$/, "no API key set"],
   [/^KI-Budget erreicht$/, "daily budget reached"], [/^KI-Guthaben aufgebraucht$/, "API credit used up"], [/^keine KI-Prüfungen aktiv$/, "no AI checks enabled"],
   [/^KI nicht erreichbar$/, "AI unreachable"], [/^KI-Antwort nicht lesbar$/, "AI answer unreadable"],

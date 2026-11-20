@@ -739,14 +739,55 @@ function renderAdvResult(j) {
 
 function renderAdvHistory(hist) {
   const k = (x) => (x && x.trades ? `${x.trades} Tr. · ${x.winrate_pct}% · Ø ${pct(x.avg_pnl_pct)} · PF ${x.profit_factor ?? "–"}` : "–");
-  $("advHistory").innerHTML = hist.length ? hist.map((h) => `
-    <div class="row" style="cursor:default">
-      <div class="sym">#${h.id} · ${dt(h.ts)}</div><div class="meta" style="text-align:right">${confTxt(h.confidence)} · ${usd(h.cost_usd, 4)}</div>
-      <div class="meta" style="grid-column:1/-1">${h.applied.length
-        ? L("Übernommen", "Applied") + ": " + h.applied.map((a) => `${esc(L(a.label, a.label_en || a.label))} ${showVal(a.old)} → <b>${showVal(a.new)}</b>`).join(", ")
-        : L(`Nicht übernommen (${h.changes.length} Vorschläge)`, `Not applied (${h.changes.length} suggestions)`)}</div>
-      ${h.applied_at ? `<div class="meta" style="grid-column:1/-1">${L("Vorher", "Before")}: ${k(h.before)}<br>${L("Seitdem", "Since")}: <span class="${h.after && h.before && h.after.avg_pnl_pct > h.before.avg_pnl_pct ? "pos" : ""}">${k(h.after)}</span></div>` : ""}
-    </div>`).join("") : `<p class="muted">${L("Noch keine Vorschläge.", "No suggestions yet.")}</p>`;
+  $("advHistory").innerHTML = hist.length ? hist.map((h) => {
+    const appliedKeys = new Set(h.applied.map((a) => a.key));
+    const reverted = !!h.reverted_at;
+    const rows = h.changes.map((c) => {
+      const done = appliedKeys.has(c.key);
+      const state = done ? (reverted ? `<span class="muted">${L("rückgängig", "reverted")}</span>` : `<span class="pos">✓ ${L("übernommen", "applied")}</span>`)
+        : `<input type="checkbox" data-hadv="${h.id}" value="${esc(c.key)}">`;
+      return `<tr><td>${state}</td><td style="white-space:normal"><b>${esc(L(c.label, c.label_en || c.label))}</b>
+        <br><span class="muted">${esc(L(c.reason_de, c.reason_en || c.reason_de))}</span></td>
+        <td class="num">${showVal(c.current)}</td><td class="num"><b>${showVal(c.value)}</b></td></tr>`;
+    }).join("");
+    const unapplied = h.changes.filter((c) => !appliedKeys.has(c.key)).length;
+    const buttons = [
+      h.applied.length && !reverted ? `<button class="btn small" data-hrevert="${h.id}">${L("Rückgängig machen", "Undo")}</button>` : "",
+      h.applied.length && reverted ? `<button class="btn small" data-hreapply="${h.id}" data-keys="${esc(h.applied.map((a) => a.key).join(","))}">${L("Erneut übernehmen", "Apply again")}</button>` : "",
+      unapplied && !reverted ? `<button class="btn small" data-happly="${h.id}">${L("Ausgewählte übernehmen", "Apply selected")}</button>` : "",
+    ].filter(Boolean).join("");
+    return `<div class="hist">
+      <div class="card-head"><b>#${h.id} · ${dt(h.ts)}</b><span class="muted" style="font-size:12px">${esc((h.model || "").replace("claude-", ""))} · ${h.trades} Trades ·
+        ${L("Vertrauen", "conf.")} ${confTxt(h.confidence)} · ${usd(h.cost_usd, 4)}</span></div>
+      ${h.low_data ? `<p class="hint neg">${L("Auf Basis von zu wenig Trades erstellt.", "Based on too few trades.")}</p>` : ""}
+      <p class="hint">${esc(L(h.summary_de || "", h.summary_en || h.summary_de || ""))}</p>
+      ${h.changes.length ? `<div class="scroll"><table class="fills"><tr><th></th><th>${L("Vorschlag", "Suggestion")}</th>
+        <th class="num">${L("damals", "then")}</th><th class="num">${L("neu", "new")}</th></tr>${rows}</table></div>`
+        : `<p class="muted">${L("Keine Änderung empfohlen.", "No change recommended.")}</p>`}
+      ${h.applied_at ? `<p class="hint">${L("Vorher", "Before")}: ${k(h.before)}<br>${reverted ? L("Bis zum Rückgängigmachen", "Until undone") : L("Seitdem", "Since")}:
+        <span class="${h.after && h.before && h.after.avg_pnl_pct > h.before.avg_pnl_pct ? "pos" : ""}">${k(h.after)}</span></p>` : ""}
+      ${buttons ? `<div class="buttons">${buttons}</div>` : ""}
+    </div>`;
+  }).join("") : `<p class="muted">${L("Noch keine Vorschläge.", "No suggestions yet.")}</p>`;
+
+  const after = async (r) => {
+    const j = await r.json();
+    $("advMsg").textContent = r.ok ? L("Erledigt ✓", "Done ✓") : L("Fehler: ", "Error: ") + (j.detail || r.status);
+    $("advMsg").className = "hint " + (r.ok ? "pos" : "neg");
+    if (r.ok) { settingsLoaded = false; loadConfig(); }
+  };
+  const post = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  document.querySelectorAll("[data-hrevert]").forEach((b) => b.onclick = async () => {
+    if (!confirm(L("Übernommene Werte dieses Vorschlags zurücksetzen?", "Restore the previous values of this suggestion?"))) return;
+    after(await post(`/api/advisor/${b.dataset.hrevert}/revert`));
+  });
+  document.querySelectorAll("[data-hreapply]").forEach((b) => b.onclick = async () =>
+    after(await post(`/api/advisor/${b.dataset.hreapply}/apply`, { keys: b.dataset.keys.split(",") })));
+  document.querySelectorAll("[data-happly]").forEach((b) => b.onclick = async () => {
+    const keys = [...document.querySelectorAll(`[data-hadv="${b.dataset.happly}"]`)].filter((c) => c.checked).map((c) => c.value);
+    if (!keys.length) return;
+    after(await post(`/api/advisor/${b.dataset.happly}/apply`, { keys }));
+  });
 }
 
 async function loadConfig() {

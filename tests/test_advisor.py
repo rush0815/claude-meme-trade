@@ -69,3 +69,41 @@ def test_advisor_requires_enough_trades_and_filters_invalid(tmp_path):
     assert hist[0]["after"]["trades"] == 6 and hist[0]["before"]["trades"] >= 6
     usage = c.get("/api/ai").json()["usage"]
     assert usage["recent"][0]["symbol"] == "Einstellungs-Vorschlag" and usage["recent"][0]["cost_usd"] > 0
+
+
+def test_advisor_revert_and_reapply(tmp_path):
+    bot = make_bot(tmp_path)
+    calls = []
+    wire(bot, calls)
+    add_trades(bot, 35)
+    c = TestClient(create_app(bot))
+    j = c.post("/api/advisor/suggest", json={}).json()
+    assert calls[0]["temperature"] == 0                                         # gleiche Daten -> gleicher Vorschlag
+    c.post(f"/api/advisor/{j['id']}/apply", json={"keys": ["strategy.min_score", "exit.mode"]})
+    assert bot.cfg["strategy"]["min_score"] == 72 and bot.cfg["exit"]["mode"] == "simple"
+    assert c.post(f"/api/advisor/{j['id']}/revert").status_code == 200
+    assert bot.cfg["strategy"]["min_score"] == 65 and bot.cfg["exit"]["mode"] == "ladder"
+    h = c.get("/api/advisor").json()["history"][0]
+    assert h["reverted_at"] and len(h["changes"]) == 2 and h["changes"][0]["reason_de"]
+    assert c.post(f"/api/advisor/{j['id']}/revert").status_code == 400          # schon rückgängig
+    c.post(f"/api/advisor/{j['id']}/apply", json={"keys": ["strategy.min_score"]})   # erneut übernehmen
+    h = c.get("/api/advisor").json()["history"][0]
+    assert bot.cfg["strategy"]["min_score"] == 72 and not h["reverted_at"]
+
+
+def test_temperature_fallback_when_model_rejects_it(tmp_path):
+    bot = make_bot(tmp_path)
+    add_trades(bot, 35)
+    seen = []
+
+    def h(req):
+        body = json.loads(req.content)
+        seen.append("temperature" in body)
+        if "temperature" in body:
+            return httpx.Response(400, text='{"error":{"message":"temperature is not supported"}}')
+        return httpx.Response(200, json={"content": [{"type": "text", "text": json.dumps(ANSWER)}],
+                                         "stop_reason": "end_turn", "usage": {"input_tokens": 10, "output_tokens": 10}})
+    bot.ai.client = httpx.AsyncClient(transport=httpx.MockTransport(h))
+    save_settings(bot.db, {"api_key": "sk-ant-test-1234567890"})
+    assert TestClient(create_app(bot)).post("/api/advisor/suggest", json={}).status_code == 200
+    assert seen == [True, False]
