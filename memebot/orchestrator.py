@@ -118,7 +118,8 @@ class Bot:
         tasks = []
         if self.cfg.scout.use_pumpportal:
             tasks.append(asyncio.create_task(
-                stream_migrations(self.cfg.api.pumpportal_ws, self.scout.on_migration, self.stop)))
+                stream_migrations(self.cfg.api.pumpportal_ws, self.scout.on_migration, self.stop,
+                                  on_status=lambda msg, lvl: self.db.log("Scout", msg, lvl))))
         self.status = "läuft"
         while not self.stop.is_set():
             t0 = time.monotonic()
