@@ -64,14 +64,14 @@ def create_app(bot: "Bot") -> FastAPI:
 
     def asset_version() -> str:
         # ändert sich bei jedem Update -> Browser lädt neue JS/CSS statt alter Kopie aus dem Cache
-        return str(int(max((STATIC / f).stat().st_mtime for f in ("app.js", "style.css", "index.html"))))
+        return str(int(max((STATIC / f).stat().st_mtime for f in ("app.js", "i18n.js", "style.css", "index.html"))))
 
     @app.get("/", include_in_schema=False)
     def index(_: None = Depends(auth)):
         v = asset_version()
         html = (STATIC / "index.html").read_text(encoding="utf-8")
-        html = html.replace("/static/app.js", f"/static/app.js?v={v}").replace("/static/style.css",
-                                                                              f"/static/style.css?v={v}")
+        for f in ("app.js", "i18n.js", "style.css"):
+            html = html.replace(f"/static/{f}", f"/static/{f}?v={v}")
         return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
     @app.get("/api/summary")
@@ -221,11 +221,12 @@ def create_app(bot: "Bot") -> FastAPI:
 
     @app.get("/api/settings")
     def get_settings(_: None = Depends(auth)):
-        from ..overrides import CHOICES, EDITABLE, current
+        from ..overrides import CHOICES, CHOICES_EN, EDITABLE, LABELS_EN, current
         cur = current(bot.cfg)
-        items = [{"key": k, "label": lbl, "options": opts, "value": cur[k]} for k, (opts, lbl) in CHOICES.items()]
-        return items + [{"key": k, "label": v[3], "min": v[1], "max": v[2], "value": cur[k]}
-                        for k, v in EDITABLE.items()]
+        items = [{"key": k, "label": lbl, "label_en": LABELS_EN.get(lbl, lbl), "options": opts,
+                  "options_en": CHOICES_EN.get(k, opts), "value": cur[k]} for k, (opts, lbl) in CHOICES.items()]
+        return items + [{"key": k, "label": v[3], "label_en": LABELS_EN.get(v[3], v[3]), "min": v[1], "max": v[2],
+                         "value": cur[k]} for k, v in EDITABLE.items()]
 
     @app.post("/api/settings")
     def set_settings(values: dict = Body(...), _: None = Depends(auth)):

@@ -14,51 +14,59 @@
     <strong>Meme-Trade-Bot</strong>
     <span class="badge" id="modeBadge">–</span>
   </div>
-  <div class="sub" id="statusLine">verbinde…</div>
+  <div class="sub" id="statusLine" data-i18n="verbinde…">verbinde…</div>
 </header>
 
 <nav id="tabs">
-  <button data-tab="overview" class="active">Übersicht</button>
-  <button data-tab="trades">Trades</button>
-  <button data-tab="agents">Agenten</button>
-  <button data-tab="analysis">Analyse</button>
-  <button data-tab="control">Steuerung</button>
+  <button data-tab="overview" class="active" data-i18n="Übersicht">Übersicht</button>
+  <button data-tab="trades" data-i18n="Trades">Trades</button>
+  <button data-tab="agents" data-i18n="Agenten">Agenten</button>
+  <button data-tab="analysis" data-i18n="Analyse">Analyse</button>
+  <button data-tab="config" data-i18n="Konfiguration">Konfiguration</button>
+  <button data-tab="control" data-i18n="Steuerung">Steuerung</button>
 </nav>
 
 <main>
   <section id="overview" class="tab active">
     <div class="kpis" id="kpis"></div>
     <div class="card">
-      <div class="card-head"><h2>Kapitalverlauf</h2>
+      <div class="card-head"><h2 data-i18n="Kapitalverlauf">Kapitalverlauf</h2>
         <div class="seg" id="rangeSeg">
-          <button data-h="24">24h</button><button data-h="168" class="active">7T</button><button data-h="720">30T</button>
+          <button data-h="24">24h</button><button data-h="168" class="active" data-i18n="7T">7T</button><button data-h="720" data-i18n="30T">30T</button>
         </div>
       </div>
       <canvas id="equityChart" height="200"></canvas>
     </div>
     <div class="card">
-      <h2>Offene Positionen</h2>
+      <h2 data-i18n="Offene Positionen">Offene Positionen</h2>
       <div id="openList" class="list"></div>
     </div>
   </section>
 
   <section id="trades" class="tab">
     <div class="card">
-      <h2>Abgeschlossene Trades</h2>
+      <h2 data-i18n="Abgeschlossene Trades">Abgeschlossene Trades</h2>
       <div id="tradeList" class="list"></div>
     </div>
   </section>
 
   <section id="agents" class="tab">
     <div class="card">
-      <h2>Watchlist &amp; Entscheidungen</h2>
+      <h2 data-i18n="Watchlist & Entscheidungen">Watchlist &amp; Entscheidungen</h2>
       <div class="scroll"><table id="candTable"></table></div>
     </div>
     <div class="card">
-      <div class="card-head"><h2>Agenten-Log</h2>
+      <div class="card-head"><h2 data-i18n="Agenten-Log">Agenten-Log</h2>
         <select id="agentFilter">
-          <option value="">alle</option><option>Scout</option><option>Stratege</option><option>Rug-Analyst</option><option>Phasen-Analyst</option>
-          <option>Risk-Manager</option><option>Position-Manager</option><option>Orchestrator</option><option>Web-UI</option>
+          <option value="" data-i18n="alle">alle</option>
+          <option value="Scout">Scout</option>
+          <option value="Stratege" data-i18n="Stratege">Stratege</option>
+          <option value="Rug-Analyst">Rug-Analyst</option>
+          <option value="Phasen-Analyst" data-i18n="Phasen-Analyst">Phasen-Analyst</option>
+          <option value="Risk-Manager">Risk-Manager</option>
+          <option value="Position-Manager">Position-Manager</option>
+          <option value="Orchestrator">Orchestrator</option>
+          <option value="Web-UI">Web-UI</option>
         </select>
       </div>
       <div id="eventLog" class="log"></div>
@@ -66,36 +74,47 @@
   </section>
 
   <section id="analysis" class="tab">
-    <div class="card"><h2>Woran scheitern die Kandidaten? (24 h)</h2>
+    <div class="card"><h2 data-i18n="Woran scheitern die Kandidaten? (24 h)">Woran scheitern die Kandidaten? (24 h)</h2>
       <p class="hint" id="funnelInfo"></p>
       <div class="scroll"><table id="funnel"></table></div>
-      <h2 style="margin-top:14px">Score-Verteilung</h2>
+      <h2 style="margin-top:14px" data-i18n="Score-Verteilung">Score-Verteilung</h2>
       <div class="scroll"><table id="scoreDist"></table></div>
     </div>
-    <div class="card"><h2>Vorschläge des Analysten</h2><ul id="tips"></ul></div>
-    <div class="card"><h2>Nach Ausstiegsgrund</h2><div class="scroll"><table id="byExit"></table></div></div>
-    <div class="card"><h2>Nach Einstiegs-Score</h2><div class="scroll"><table id="byScore"></table></div></div>
+    <div class="card"><h2 data-i18n="Vorschläge des Analysten">Vorschläge des Analysten</h2><ul id="tips"></ul></div>
+    <div class="card"><h2 data-i18n="Nach Ausstiegsgrund">Nach Ausstiegsgrund</h2><div class="scroll"><table id="byExit"></table></div></div>
+    <div class="card"><h2 data-i18n="Nach Einstiegs-Score">Nach Einstiegs-Score</h2><div class="scroll"><table id="byScore"></table></div></div>
+  </section>
+
+  <section id="config" class="tab">
+    <div class="card">
+      <h2 data-i18n="Ausstieg & Risiko anpassen">Ausstieg &amp; Risiko anpassen</h2>
+      <p class="hint" data-i18n="Gilt sofort, auch für offene Positionen. Wird gespeichert und überlebt Neustarts.">Gilt sofort, auch für offene Positionen. Wird gespeichert und überlebt Neustarts.</p>
+      <form id="settingsForm" class="form"></form>
+      <button class="btn" id="saveSettings" data-i18n="Speichern">Speichern</button>
+      <p class="hint" id="settingsMsg"></p>
+    </div>
+    <div class="card"><h2 data-i18n="Woher kommen die Daten?">Woher kommen die Daten?</h2><div class="kv" id="dataInfo"></div></div>
+    <div class="card"><h2 data-i18n="Aktive Konfiguration">Aktive Konfiguration</h2><pre id="cfg"></pre></div>
   </section>
 
   <section id="control" class="tab">
     <div class="card">
-      <h2>Steuerung</h2>
+      <h2 data-i18n="Steuerung">Steuerung</h2>
       <div class="buttons">
-        <button class="btn" data-act="pause">Pausieren (keine neuen Käufe)</button>
-        <button class="btn" data-act="resume">Fortsetzen / Not-Aus lösen</button>
-        <button class="btn danger" data-act="kill">NOT-AUS: alles verkaufen &amp; stoppen</button>
+        <button class="btn" data-act="pause" data-i18n="Pausieren (keine neuen Käufe)">Pausieren (keine neuen Käufe)</button>
+        <button class="btn" data-act="resume" data-i18n="Fortsetzen / Not-Aus lösen">Fortsetzen / Not-Aus lösen</button>
+        <button class="btn danger" data-act="kill" data-i18n="NOT-AUS: alles verkaufen & stoppen">NOT-AUS: alles verkaufen &amp; stoppen</button>
       </div>
-      <p class="hint">Pausieren lässt offene Positionen weiterlaufen (Stop-Loss etc. bleiben aktiv).</p>
+      <p class="hint" data-i18n="Pausieren lässt offene Positionen weiterlaufen (Stop-Loss etc. bleiben aktiv).">Pausieren lässt offene Positionen weiterlaufen (Stop-Loss etc. bleiben aktiv).</p>
     </div>
     <div class="card">
-      <h2>Ausstieg &amp; Risiko anpassen</h2>
-      <p class="hint">Gilt sofort, auch für offene Positionen. Wird gespeichert und überlebt Neustarts.</p>
-      <form id="settingsForm" class="form"></form>
-      <button class="btn" id="saveSettings">Speichern</button>
-      <p class="hint" id="settingsMsg"></p>
+      <h2 data-i18n="Sprache">Sprache</h2>
+      <select id="langSelect" class="wide">
+        <option value="de">Deutsch</option>
+        <option value="en">English</option>
+      </select>
+      <p class="hint" data-i18n="Sprache der Oberfläche. Wird in diesem Browser gespeichert.">Sprache der Oberfläche. Wird in diesem Browser gespeichert.</p>
     </div>
-    <div class="card"><h2>Woher kommen die Daten?</h2><div class="kv" id="dataInfo"></div></div>
-    <div class="card"><h2>Aktive Konfiguration</h2><pre id="cfg"></pre></div>
   </section>
 </main>
 
@@ -106,6 +125,7 @@
   </div>
 </div>
 
+<script src="/static/i18n.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
