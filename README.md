@@ -37,7 +37,8 @@ Alle Werte stehen in `config.toml` und lassen sich anpassen.
 * **Trades:** alle abgeschlossenen Trades; Antippen zeigt, *warum* gekauft wurde, Sicherheitswerte und alle Ausführungen
 * **Agenten:** Watchlist mit Entscheidung und Grund je Coin, Log aller Agenten
 * **Analyse:** Auswertung + Vorschläge
-* **Steuerung:** Pausieren, Fortsetzen, Not-Aus (alles verkaufen)
+* **Konfiguration:** Ausstiegsregeln, Risiko, Takte live ändern; Datenquellen; aktive Konfiguration
+* **Steuerung:** Pausieren, Fortsetzen, Not-Aus (alles verkaufen), Sprache (Deutsch/English)
 
 Die Übersicht wird per WebSocket live vom Bot aktualisiert (bis zu 4×/s). Unter *Steuerung → Woher kommen die Daten?*
 steht, wie jede Information aktualisiert wird.

@@ -1,19 +1,22 @@
 "use strict";
+// Texte: L("deutsch", "english"), t() für feste Texte, tr() für Texte vom Bot – siehe i18n.js
 // Token-Namen kommen von außen -> immer escapen
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const $ = (id) => document.getElementById(id);
 const sol = (x, d = 4) => (x == null || isNaN(x) ? "–" : Number(x).toFixed(d));
 const pct = (x, d = 1) => (x == null || isNaN(x) ? "–" : (x > 0 ? "+" : "") + Number(x).toFixed(d) + "%");
 const cls = (x) => (x > 0 ? "pos" : x < 0 ? "neg" : "");
-const ago = (ts) => {
+const span = (ts) => {
   const s = Date.now() / 1000 - ts;
   if (s < 60) return Math.round(s) + " s";
   if (s < 3600) return Math.round(s / 60) + " min";
   if (s < 86400) return (s / 3600).toFixed(1) + " h";
-  return (s / 86400).toFixed(1) + " T";
+  return (s / 86400).toFixed(1) + L(" T", " d");
 };
-const dt = (ts) => new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const ago = (ts) => L("vor " + span(ts), span(ts) + " ago");
+const dt = (ts) => new Date(ts * 1000).toLocaleString(LOCALE(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const dur = (a, b) => { const m = (b - a) / 60; return m < 60 ? Math.round(m) + " min" : (m / 60).toFixed(1) + " h"; };
+const statusName = (s) => (STATUS[LANG] || STATUS.de)[s] || s;
 
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -22,8 +25,9 @@ async function api(path, opts) {
 }
 
 let tab = "overview", hours = 168, lastSummary = null;
+let wsLive = false, ws = null;
 
-// ---------------------------------------------------------------- Tabs
+// ---------------------------------------------------------------- Tabs & Bedienung
 document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
   document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x === b));
   tab = b.dataset.tab;
@@ -39,10 +43,19 @@ $("modalClose").onclick = () => $("modal").classList.add("hidden");
 $("modal").onclick = (e) => { if (e.target.id === "modal") $("modal").classList.add("hidden"); };
 document.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
   const act = b.dataset.act;
-  if (act === "kill" && !confirm("Wirklich alle Positionen verkaufen und den Bot stoppen?")) return;
+  if (act === "kill" && !confirm(L("Wirklich alle Positionen verkaufen und den Bot stoppen?",
+    "Really sell all positions and stop the bot?"))) return;
   await api("/api/control/" + act, { method: "POST" });
   refresh();
 });
+$("langSelect").value = LANG;
+$("langSelect").onchange = () => {
+  setLang($("langSelect").value);
+  applyStaticLang();
+  settingsLoaded = false;
+  refresh();
+};
+applyStaticLang();
 
 // ---------------------------------------------------------------- Übersicht
 function kpi(label, value, sub = "", c = "") {
@@ -59,20 +72,22 @@ function renderSummary(s) {
   $("statusDot").className = "dot " + (s.killed ? "bad" : s.paused || stale ? "warn" : "ok");
   $("modeBadge").textContent = s.sim ? "SIMULATION" : s.mode.toUpperCase();
   $("modeBadge").className = "badge " + s.mode;
-  $("statusLine").textContent = (s.killed ? "NOT-AUS aktiv · " : s.paused ? "pausiert · " : "") +
-    `${s.status} (aktiv vor ${s.last_cycle ? ago(s.last_cycle) : "–"}) · Watchlist ${s.watchlist} Coins` +
-    (s.watch_oldest_s != null ? `, max. ${Math.round(s.watch_oldest_s)} s alt` : "") +
+  const st0 = LANG === "en" ? (BOT_STATUS_EN[s.status] ?? s.status) : s.status;
+  $("statusLine").textContent = (s.killed ? L("NOT-AUS aktiv · ", "KILL SWITCH active · ") : s.paused ? L("pausiert · ", "paused · ") : "") +
+    `${st0} (${L("aktiv", "active")} ${s.last_cycle ? ago(s.last_cycle) : "–"}) · Watchlist ${s.watchlist} Coins` +
+    (s.watch_oldest_s != null ? L(`, max. ${Math.round(s.watch_oldest_s)} s alt`, `, max. ${Math.round(s.watch_oldest_s)} s old`) : "") +
     (wsLive ? " · ⚡ Live" : "");
   const st = s.stats;
   $("kpis").innerHTML =
-    kpi("Kapital", sol(s.equity_sol, 3) + " SOL", "Kasse " + sol(s.cash_sol, 3)) +
-    kpi("Rendite gesamt", pct(s.total_return_pct), "Start " + sol(s.start_sol, 3) + " SOL", cls(s.total_return_pct)) +
-    kpi("Offen", s.open_count + " Pos.", "unrealisiert " + sol(s.unrealized_sol), cls(s.unrealized_sol)) +
-    kpi("Letzte 24 h", sol(s.last24h.pnl_sol) + " SOL", s.last24h.anzahl + " Trades", cls(s.last24h.pnl_sol)) +
-    kpi("Trades", st.anzahl, st.gewinner + " Gewinner") +
-    kpi("Trefferquote", st.anzahl ? st.trefferquote + "%" : "–", "Ø " + pct(st.avg_pct)) +
-    kpi("Profit-Faktor", st.profit_faktor ?? "–", "Gewinne / Verluste", st.profit_faktor > 1 ? "pos" : st.profit_faktor ? "neg" : "") +
-    kpi("Max. Drawdown", st.max_drawdown_pct != null ? st.max_drawdown_pct + "%" : "–", "vom Höchststand");
+    kpi(L("Kapital", "Capital"), sol(s.equity_sol, 3) + " SOL", L("Kasse ", "Cash ") + sol(s.cash_sol, 3)) +
+    kpi(L("Rendite gesamt", "Total return"), pct(s.total_return_pct), "Start " + sol(s.start_sol, 3) + " SOL", cls(s.total_return_pct)) +
+    kpi(L("Offen", "Open"), s.open_count + L(" Pos.", " pos."), L("unrealisiert ", "unrealized ") + sol(s.unrealized_sol), cls(s.unrealized_sol)) +
+    kpi(L("Letzte 24 h", "Last 24 h"), sol(s.last24h.pnl_sol) + " SOL", s.last24h.anzahl + " Trades", cls(s.last24h.pnl_sol)) +
+    kpi("Trades", st.anzahl, st.gewinner + L(" Gewinner", " winners")) +
+    kpi(L("Trefferquote", "Win rate"), st.anzahl ? st.trefferquote + "%" : "–", L("Ø ", "avg ") + pct(st.avg_pct)) +
+    kpi(L("Profit-Faktor", "Profit factor"), st.profit_faktor ?? "–", L("Gewinne / Verluste", "wins / losses"),
+      st.profit_faktor > 1 ? "pos" : st.profit_faktor ? "neg" : "") +
+    kpi("Max. Drawdown", st.max_drawdown_pct != null ? st.max_drawdown_pct + "%" : "–", L("vom Höchststand", "from peak"));
 }
 
 let eqRows = [], eqLoaded = 0;
@@ -95,7 +110,10 @@ function drawChart(cv, pts, baseline) {
   g.scale(dpr, dpr);
   g.clearRect(0, 0, w, h);
   g.font = "11px sans-serif"; g.fillStyle = "#8b949e";
-  if (pts.length < 2) { g.fillText("Noch keine Daten – der Verlauf erscheint nach ein paar Minuten.", 8, 20); return; }
+  if (pts.length < 2) {
+    g.fillText(L("Noch keine Daten – der Verlauf erscheint nach ein paar Minuten.", "No data yet – the curve appears after a few minutes."), 8, 20);
+    return;
+  }
   const pad = { l: 46, r: 8, t: 8, b: 20 };
   const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
   if (baseline) ys.push(baseline);
@@ -125,16 +143,18 @@ function drawChart(cv, pts, baseline) {
 
 function srcBadge(pr) {
   if (!pr) return "";
-  return pr.source === "helius" ? `<span class="pos">⚡ live</span>` : `<span title="${esc(pr.note || "")}">DexScreener</span>`;
+  return pr.source === "helius" ? `<span class="pos">⚡ live</span>` : `<span title="${esc(tr(pr.note || ""))}">DexScreener</span>`;
 }
 
 function posRow(p) {
   const open = p.status === "open";
   const v = open ? p.unrealized_sol : p.pnl_sol, vp = open ? p.unrealized_pct : p.pnl_pct;
+  const rest = p.tokens_total ? Math.round(p.tokens_remaining / p.tokens_total * 100) : 0;
   const meta = open
-    ? `${srcBadge(p.price)} · seit ${ago(p.opened_at)} · Einsatz ${sol(p.size_sol)} · Score ${Math.round(p.score)}` +
-      (p.tp_hits ? ` · TP ${p.tp_hits} verkauft: ${sol(p.sol_received)} SOL gesichert, Rest ${Math.round(p.tokens_remaining / p.tokens_total * 100)}%` : "")
-    : `${dt(p.closed_at)} · ${esc(p.exit_reason)} · ${dur(p.opened_at, p.closed_at)} · Einsatz ${sol(p.size_sol)}`;
+    ? `${srcBadge(p.price)} · ${L("seit", "for")} ${span(p.opened_at)} · ${L("Einsatz", "Stake")} ${sol(p.size_sol)} · Score ${Math.round(p.score)}` +
+      (p.tp_hits ? L(` · TP ${p.tp_hits} verkauft: ${sol(p.sol_received)} SOL gesichert, Rest ${rest}%`,
+                     ` · TP ${p.tp_hits} sold: ${sol(p.sol_received)} SOL secured, ${rest}% left`) : "")
+    : `${dt(p.closed_at)} · ${esc(tr(p.exit_reason))} · ${dur(p.opened_at, p.closed_at)} · ${L("Einsatz", "Stake")} ${sol(p.size_sol)}`;
   return `<div class="row" data-id="${p.id}">
     <div class="sym">${esc(p.symbol || p.mint.slice(0, 6))}</div>
     <div class="pnl ${cls(v)}">${sol(v)} SOL</div>
@@ -151,28 +171,33 @@ async function loadOpen() {
 }
 
 function renderOpen(rows) {
-  $("openList").innerHTML = rows.length ? rows.map(posRow).join("") : `<div class="empty">Keine offenen Positionen.</div>`;
+  $("openList").innerHTML = rows.length ? rows.map(posRow).join("")
+    : `<div class="empty">${L("Keine offenen Positionen.", "No open positions.")}</div>`;
   bindRows($("openList"));
 }
 
 // ---------------------------------------------------------------- Trades
 async function loadTrades() {
   const rows = await api("/api/positions?state=closed&limit=500");
-  $("tradeList").innerHTML = rows.length ? rows.map(posRow).join("") : `<div class="empty">Noch keine abgeschlossenen Trades.</div>`;
+  $("tradeList").innerHTML = rows.length ? rows.map(posRow).join("")
+    : `<div class="empty">${L("Noch keine abgeschlossenen Trades.", "No closed trades yet.")}</div>`;
   bindRows($("tradeList"));
 }
 
 const PARTS = ["kaufdruck", "volumen_beschleunigung", "momentum", "trend", "beteiligung", "liquiditaet"];
 function scoreBlock(sd) {
+  const name = (k) => (LANG === "en" ? PART_EN[k] : k.replaceAll("_", " "));
+  const num = (x) => (x || 0).toLocaleString(LOCALE());
   const bars = PARTS.filter((k) => k in sd).map((k) =>
-    `<div>${k.replaceAll("_", " ")}</div><div>${sd[k]}<div class="bar"><i style="width:${sd[k]}%"></i></div></div>`).join("");
+    `<div>${name(k)}</div><div>${sd[k]}<div class="bar"><i style="width:${sd[k]}%"></i></div></div>`).join("");
   return `<div class="kv">${bars}
-      <div>Kauf/Verkauf 5m</div><div>${sd.kauf_verkauf ?? "–"}</div>
-      <div>Volumen-Beschl.</div><div>${sd.vol_beschl ?? "–"}×</div>
-      <div>Kurs 5m / 1h</div><div>${pct(sd.chg_m5)} / ${pct(sd.chg_h1)}</div>
-      <div>Liquidität / FDV</div><div>$${(sd.liq_usd || 0).toLocaleString("de-DE")} / $${(sd.fdv_usd || 0).toLocaleString("de-DE")}</div>
-      <div>Alter</div><div>${sd.alter_min ?? "–"} min</div>
-      <div>Abstand vom Hoch</div><div>${sd.vom_hoch_pct != null ? pct(sd.vom_hoch_pct) + " (Hoch vor " + sd.std_seit_hoch + " h)" : "–"}</div>
+      <div>${L("Kauf/Verkauf 5m", "Buys/sells 5m")}</div><div>${sd.kauf_verkauf ?? "–"}</div>
+      <div>${L("Volumen-Beschl.", "Volume accel.")}</div><div>${sd.vol_beschl ?? "–"}×</div>
+      <div>${L("Kurs 5m / 1h", "Price 5m / 1h")}</div><div>${pct(sd.chg_m5)} / ${pct(sd.chg_h1)}</div>
+      <div>${L("Liquidität / FDV", "Liquidity / FDV")}</div><div>$${num(sd.liq_usd)} / $${num(sd.fdv_usd)}</div>
+      <div>${L("Alter", "Age")}</div><div>${sd.alter_min ?? "–"} min</div>
+      <div>${L("Abstand vom Hoch", "Distance from high")}</div><div>${sd.vom_hoch_pct != null
+        ? pct(sd.vom_hoch_pct) + L(" (Hoch vor " + sd.std_seit_hoch + " h)", " (high " + sd.std_seit_hoch + " h ago)") : "–"}</div>
     </div>`;
 }
 
@@ -183,119 +208,130 @@ async function showPosition(id) {
   const entry = +p.entry_price;
   const vsEntry = (x) => (x && entry ? pct((x / entry - 1) * 100) : "–");
   const fmtP = (x) => (x ? (+x).toExponential(3) : "–");
-  const tm = (ts) => new Date(ts * 1000).toLocaleTimeString("de-DE");
+  const tm = (ts) => new Date(ts * 1000).toLocaleTimeString(LOCALE());
   const fills = p.fills.map((f) => {
     const buy = f.side === "buy";
     const tx = f.signature && f.signature !== "paper" ? ` · <a href="https://solscan.io/tx/${esc(f.signature)}" target="_blank">Tx</a>` : "";
-    return `<tr><td>${tm(f.ts)}<br><span class="muted">${buy ? "Kauf" : esc(f.reason)}${tx}</span></td>
+    return `<tr><td>${tm(f.ts)}<br><span class="muted">${buy ? L("Kauf", "Buy") : esc(tr(f.reason))}${tx}</span></td>
     <td class="num">${sol(f.sol_amount)}</td>
-    <td class="num">${fmtP(f.price)}<br><span class="muted">Markt ${fmtP(f.market_price)}</span></td>
-    <td class="num"><span class="${buy ? "" : cls(f.price / entry - 1)}">${buy ? "Einstieg" : vsEntry(f.price)}</span><br>
-      <span class="muted">${buy ? "" : "Ausl. " + vsEntry(f.market_price)}</span></td></tr>`;
+    <td class="num">${fmtP(f.price)}<br><span class="muted">${L("Markt", "Market")} ${fmtP(f.market_price)}</span></td>
+    <td class="num"><span class="${buy ? "" : cls(f.price / entry - 1)}">${buy ? L("Einstieg", "Entry") : vsEntry(f.price)}</span><br>
+      <span class="muted">${buy ? "" : L("Ausl. ", "Trig. ") + vsEntry(f.market_price)}</span></td></tr>`;
   }).join("");
+  const authority = (x) => (x ? L("aktiv", "active") : L("entzogen", "revoked"));
   $("modalContent").innerHTML = `
     <h2>${esc(p.symbol)} <span class="muted">${esc(p.name)}</span></h2>
     <div class="kv">
-      <div>Status</div><div>${open ? "offen" : "geschlossen – " + esc(p.exit_reason)}</div>
-      <div>Ergebnis</div><div class="${cls(open ? p.unrealized_sol : p.pnl_sol)}">${sol(open ? p.unrealized_sol : p.pnl_sol)} SOL (${pct(open ? p.unrealized_pct : p.pnl_pct)})</div>
-      <div>Einsatz</div><div>${sol(p.size_sol)} SOL</div>
-      <div>Zurück erhalten</div><div>${sol(p.sol_received)} SOL${open && p.tp_hits ? " (aus Teilverkäufen)" : ""}</div>
-      ${open ? `<div>Noch gehalten</div><div>${Math.round(p.tokens_remaining / p.tokens_total * 100)}% der Token, Wert ${sol(p.value_sol)} SOL</div>` : ""}
-      <div>Einstieg / Hoch / Letzter</div><div>${(+p.entry_price).toExponential(3)} / ${(+p.high_price).toExponential(3)} / ${(+p.last_price).toExponential(3)}</div>
-      <div>Eröffnet</div><div>${dt(p.opened_at)}${p.closed_at ? " · Dauer " + dur(p.opened_at, p.closed_at) : ""}</div>
+      <div>Status</div><div>${open ? L("offen", "open") : L("geschlossen – ", "closed – ") + esc(tr(p.exit_reason))}</div>
+      <div>${L("Ergebnis", "Result")}</div><div class="${cls(open ? p.unrealized_sol : p.pnl_sol)}">${sol(open ? p.unrealized_sol : p.pnl_sol)} SOL (${pct(open ? p.unrealized_pct : p.pnl_pct)})</div>
+      <div>${L("Einsatz", "Stake")}</div><div>${sol(p.size_sol)} SOL</div>
+      <div>${L("Zurück erhalten", "Received back")}</div><div>${sol(p.sol_received)} SOL${open && p.tp_hits ? L(" (aus Teilverkäufen)", " (from partial sells)") : ""}</div>
+      ${open ? `<div>${L("Noch gehalten", "Still held")}</div><div>${Math.round(p.tokens_remaining / p.tokens_total * 100)}% ${L("der Token, Wert", "of tokens, value")} ${sol(p.value_sol)} SOL</div>` : ""}
+      <div>${L("Einstieg / Hoch / Letzter", "Entry / high / last")}</div><div>${(+p.entry_price).toExponential(3)} / ${(+p.high_price).toExponential(3)} / ${(+p.last_price).toExponential(3)}</div>
+      <div>${L("Eröffnet", "Opened")}</div><div>${dt(p.opened_at)}${p.closed_at ? L(" · Dauer ", " · duration ") + dur(p.opened_at, p.closed_at) : ""}</div>
       <div>Score</div><div>${Math.round(p.score)}</div>
       <div>Mint</div><div style="word-break:break-all">${esc(p.mint)}</div>
       <div>Links</div><div><a href="https://dexscreener.com/solana/${esc(p.pair_address || p.mint)}" target="_blank">DexScreener</a> ·
         <a href="https://rugcheck.xyz/tokens/${esc(p.mint)}" target="_blank">RugCheck</a></div>
     </div>
-    <h2>Warum gekauft (Stratege)</h2>
+    <h2>${L("Warum gekauft (Stratege)", "Why it was bought (strategist)")}</h2>
     ${scoreBlock(sd)}
-    <h2>Sicherheit (Rug-Analyst)</h2>
+    <h2>${L("Sicherheit (Rug-Analyst)", "Security (rug analyst)")}</h2>
     <div class="kv">
-      <div>RugCheck-Score</div><div>${sec.score ?? "–"}</div>
-      <div>LP gelockt</div><div>${sec.lp_locked_pct ?? "–"}%</div>
-      <div>Top-10-Holder</div><div>${sec.top10_pct ?? "–"}%</div>
-      <div>Mint/Freeze</div><div>${sec.mint_authority ? "aktiv" : "entzogen"} / ${sec.freeze_authority ? "aktiv" : "entzogen"}</div>
+      <div>${L("RugCheck-Score", "RugCheck score")}</div><div>${sec.score ?? "–"}</div>
+      <div>${L("LP gelockt", "LP locked")}</div><div>${sec.lp_locked_pct ?? "–"}%</div>
+      <div>${L("Top-10-Holder", "Top 10 holders")}</div><div>${sec.top10_pct ?? "–"}%</div>
+      <div>Mint/Freeze</div><div>${authority(sec.mint_authority)} / ${authority(sec.freeze_authority)}</div>
     </div>
-    <h2>Ausführungen</h2>
-    <p class="hint">Preise in SOL pro Token. „Markt“ = Kurs, bei dem der Bot entschieden hat; darüber der tatsächlich erzielte Preis
-      (inkl. Preiseinfluss, Gebühren, Sicherheitsabschlag). „Ausl.“ (Auslöser) = Abstand des Marktkurses zum Einstieg in dem Moment.</p>
-    <div class="scroll"><table class="fills"><tr><th>Zeit / Grund</th><th class="num">SOL</th><th class="num">Preis</th><th class="num">± Entry</th></tr>${fills}</table></div>
-    ${open ? `<p><button class="btn small danger" id="closeBtn">Position jetzt verkaufen</button></p>` : ""}`;
+    <h2>${L("Ausführungen", "Executions")}</h2>
+    <p class="hint">${L(`Preise in SOL pro Token. „Markt“ = Kurs, bei dem der Bot entschieden hat; darüber der tatsächlich erzielte Preis
+      (inkl. Preiseinfluss, Gebühren, Sicherheitsabschlag). „Ausl.“ (Auslöser) = Abstand des Marktkurses zum Einstieg in dem Moment.`,
+      `Prices in SOL per token. "Market" = price at which the bot decided; above it the price actually achieved
+      (incl. price impact, fees, safety discount). "Trig." (trigger) = distance of the market price from the entry at that moment.`)}</p>
+    <div class="scroll"><table class="fills"><tr><th>${L("Zeit / Grund", "Time / reason")}</th><th class="num">SOL</th>
+      <th class="num">${L("Preis", "Price")}</th><th class="num">± Entry</th></tr>${fills}</table></div>
+    ${open ? `<p><button class="btn small danger" id="closeBtn">${L("Position jetzt verkaufen", "Sell position now")}</button></p>` : ""}`;
   $("modal").classList.remove("hidden");
   if (open) $("closeBtn").onclick = async () => {
-    if (!confirm("Position verkaufen?")) return;
+    if (!confirm(L("Position verkaufen?", "Sell position?"))) return;
     await api(`/api/positions/${p.id}/close`, { method: "POST" });
     $("modal").classList.add("hidden"); refresh();
   };
 }
 
 // ---------------------------------------------------------------- Agenten
-const STATUS_DE = { new: "neu", waiting: "wartet", rejected: "abgelehnt", bought: "gekauft", expired: "abgelaufen" };
+let candCache = [];
 async function loadAgents() {
   const [cands, evs] = await Promise.all([
     api("/api/candidates?limit=80"),
     api("/api/events?limit=200" + ($("agentFilter").value ? "&agent=" + encodeURIComponent($("agentFilter").value) : "")),
   ]);
   candCache = cands;
-  $("candTable").innerHTML = `<tr><th>Token</th><th>Status</th><th class="num">Score</th><th>Grund</th><th>Quelle</th><th>geprüft</th></tr>` +
-    cands.map((c, i) => `<tr class="click" data-i="${i}"><td>${esc(c.symbol || c.mint.slice(0, 6))}</td><td><span class="tag ${esc(c.status)}">${esc(STATUS_DE[c.status] || c.status)}</span></td>
-      <td class="num">${c.score != null ? Math.round(c.score) : "–"}</td><td>${esc(c.reason)}</td><td>${esc(c.source)}</td>
+  $("candTable").innerHTML = `<tr><th>Token</th><th>Status</th><th class="num">Score</th><th>${L("Grund", "Reason")}</th>
+    <th>${L("Quelle", "Source")}</th><th>${L("geprüft", "checked")}</th></tr>` +
+    cands.map((c, i) => `<tr class="click" data-i="${i}"><td>${esc(c.symbol || c.mint.slice(0, 6))}</td>
+      <td><span class="tag ${esc(c.status)}">${esc(statusName(c.status))}</span></td>
+      <td class="num">${c.score != null ? Math.round(c.score) : "–"}</td><td>${esc(tr(c.reason))}</td><td>${esc(c.source)}</td>
       <td>${c.last_checked ? ago(c.last_checked) : "–"}</td></tr>`).join("");
   $("candTable").querySelectorAll("tr.click").forEach((r) => r.onclick = () => showCandidate(candCache[+r.dataset.i]));
   $("eventLog").innerHTML = evs.map((e) => `<div class="${esc(e.level)}"><span class="t">${dt(e.ts)}</span>
-    <span class="a">${esc(e.agent)}</span> ${esc(e.message)}</div>`).join("") || `<div class="empty">Noch keine Einträge.</div>`;
+    <span class="a">${esc(agentName(e.agent))}</span> ${esc(tr(e.message))}</div>`).join("")
+    || `<div class="empty">${L("Noch keine Einträge.", "No entries yet.")}</div>`;
 }
 
-let candCache = [];
 function showCandidate(c) {
   const sd = c.details || {};
   $("modalContent").innerHTML = `
-    <h2>${esc(c.symbol || c.mint.slice(0, 6))} <span class="tag ${esc(c.status)}">${esc(STATUS_DE[c.status] || c.status)}</span></h2>
+    <h2>${esc(c.symbol || c.mint.slice(0, 6))} <span class="tag ${esc(c.status)}">${esc(statusName(c.status))}</span></h2>
     <div class="kv">
-      <div>Score</div><div>${c.score != null ? Math.round(c.score) : "–"} (Kaufschwelle ${lastSummary?.min_score ?? "–"})</div>
-      <div>Entscheidung</div><div>${esc(c.reason)}</div>
-      <div>Quelle</div><div>${esc(c.source)}</div>
-      <div>Entdeckt / geprüft</div><div>vor ${ago(c.first_seen)} / ${c.last_checked ? "vor " + ago(c.last_checked) : "–"}</div>
+      <div>Score</div><div>${c.score != null ? Math.round(c.score) : "–"} (${L("Kaufschwelle", "buy threshold")} ${lastSummary?.min_score ?? "–"})</div>
+      <div>${L("Entscheidung", "Decision")}</div><div>${esc(tr(c.reason))}</div>
+      <div>${L("Quelle", "Source")}</div><div>${esc(c.source)}</div>
+      <div>${L("Entdeckt / geprüft", "Found / checked")}</div><div>${ago(c.first_seen)} / ${c.last_checked ? ago(c.last_checked) : "–"}</div>
       <div>Mint</div><div style="word-break:break-all">${esc(c.mint)}</div>
       <div>Links</div><div><a href="https://dexscreener.com/solana/${esc(c.mint)}" target="_blank">DexScreener</a> ·
         <a href="https://rugcheck.xyz/tokens/${esc(c.mint)}" target="_blank">RugCheck</a></div>
     </div>
-    <h2>Bewertung (Stratege)</h2>
-    ${Object.keys(sd).length ? scoreBlock(sd) : `<p class="muted">Noch keine Marktdaten.</p>`}`;
+    <h2>${L("Bewertung (Stratege)", "Rating (strategist)")}</h2>
+    ${Object.keys(sd).length ? scoreBlock(sd) : `<p class="muted">${L("Noch keine Marktdaten.", "No market data yet.")}</p>`}`;
   $("modal").classList.remove("hidden");
 }
 
 // ---------------------------------------------------------------- Analyse
 function aggTable(obj, first) {
   const rows = Object.entries(obj);
-  return `<tr><th>${first}</th><th class="num">Trades</th><th class="num">Treffer</th><th class="num">Ø %</th><th class="num">PnL SOL</th><th class="num">PF</th></tr>` +
-    (rows.length ? rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v.anzahl}</td><td class="num">${v.anzahl ? v.trefferquote + "%" : "–"}</td>
+  return `<tr><th>${first}</th><th class="num">Trades</th><th class="num">${L("Treffer", "Wins")}</th><th class="num">Ø %</th>
+    <th class="num">PnL SOL</th><th class="num">PF</th></tr>` +
+    (rows.length ? rows.map(([k, v]) => `<tr><td>${esc(tr(k))}</td><td class="num">${v.anzahl}</td><td class="num">${v.anzahl ? v.trefferquote + "%" : "–"}</td>
       <td class="num ${cls(v.avg_pct)}">${v.anzahl ? pct(v.avg_pct) : "–"}</td><td class="num ${cls(v.pnl_sol)}">${sol(v.pnl_sol)}</td>
-      <td class="num">${v.profit_faktor ?? "–"}</td></tr>`).join("") : `<tr><td colspan="6" class="muted">keine Daten</td></tr>`);
+      <td class="num">${v.profit_faktor ?? "–"}</td></tr>`).join("")
+      : `<tr><td colspan="6" class="muted">${L("keine Daten", "no data")}</td></tr>`);
 }
 
 async function loadAnalysis() {
   const [a, f] = await Promise.all([api("/api/analysis"), api("/api/funnel")]);
-  $("funnelInfo").textContent = `${f.kandidaten} Coins geprüft. Letzte Entscheidung je Coin, Kaufschwelle Score ${f.min_score}.`;
-  $("funnel").innerHTML = `<tr><th>Grund</th><th class="num">Coins</th><th class="num">Ø Score</th><th class="num">max</th></tr>` +
-    (f.gruende.map((g) => `<tr><td>${esc(g.grund)}</td><td class="num">${g.anzahl}</td>
+  $("funnelInfo").textContent = L(`${f.kandidaten} Coins geprüft. Letzte Entscheidung je Coin, Kaufschwelle Score ${f.min_score}.`,
+    `${f.kandidaten} coins checked. Latest decision per coin, buy threshold score ${f.min_score}.`);
+  $("funnel").innerHTML = `<tr><th>${L("Grund", "Reason")}</th><th class="num">Coins</th><th class="num">Ø Score</th><th class="num">max</th></tr>` +
+    (f.gruende.map((g) => `<tr><td>${esc(tr(g.grund))}</td><td class="num">${g.anzahl}</td>
       <td class="num">${g.avg_score ?? "–"}</td><td class="num">${g.max_score ?? "–"}</td></tr>`).join("") ||
-      `<tr><td colspan="4" class="muted">keine Daten</td></tr>`);
+      `<tr><td colspan="4" class="muted">${L("keine Daten", "no data")}</td></tr>`);
   const maxN = Math.max(1, ...Object.values(f.score_verteilung));
   $("scoreDist").innerHTML = Object.entries(f.score_verteilung).map(([k, n]) =>
     `<tr><td style="width:60px">${k}</td><td><div class="bar" style="height:10px"><i style="width:${n / maxN * 100}%;${
       +k.split("–")[0] >= f.min_score ? "background:var(--green)" : ""}"></i></div></td><td class="num" style="width:40px">${n}</td></tr>`).join("");
-  $("tips").innerHTML = a.vorschlaege.map((t) => `<li>${esc(t)}</li>`).join("");
-  $("byExit").innerHTML = aggTable(a.nach_ausstieg, "Ausstieg");
+  $("tips").innerHTML = a.vorschlaege.map((x) => `<li>${esc(tr(x))}</li>`).join("");
+  $("byExit").innerHTML = aggTable(a.nach_ausstieg, L("Ausstieg", "Exit"));
   $("byScore").innerHTML = aggTable(a.nach_score, "Score");
 }
 
+// ---------------------------------------------------------------- Konfiguration
 let settingsLoaded = false;
 function renderDataInfo() {
   const s = lastSummary || {};
-  const feed = !s.feed_enabled ? "aus (kein Helius-Key)" : s.feed_connected ? "verbunden ✓" : "nicht verbunden – Rückfall auf DexScreener";
-  $("dataInfo").innerHTML = `
+  const feed = !s.feed_enabled ? L("aus (kein Helius-Key)", "off (no Helius key)")
+    : s.feed_connected ? L("verbunden ✓", "connected ✓") : L("nicht verbunden – Rückfall auf DexScreener", "not connected – falling back to DexScreener");
+  $("dataInfo").innerHTML = L(`
     <div>Kurse offener Positionen</div><div><b>⚡ Live aus der Blockchain</b> (Helius, bei jedem Trade im Pool, ~0,5–1 s) für PumpSwap-Pools.
       Andere Pools: DexScreener alle 2 s (DexScreener selbst hinkt einige Sekunden hinterher). Status: ${feed}</div>
     <div>Stop-Loss / Take-Profit</div><div>werden bei jedem neuen Kurs sofort geprüft</div>
@@ -305,16 +341,27 @@ function renderDataInfo() {
     <div>Statuszeile oben</div><div>„aktiv vor X s“ = wann der Bot zuletzt eine Runde beendet hat (sollte nur wenige Sekunden sein, sonst hängt er).
       „Watchlist N Coins, max. Y s alt“ = so alt sind die Daten des am längsten nicht geprüften Coins (Takt ~30 s)</div>
     <div>Diese Oberfläche</div><div>${wsLive ? "⚡ Live-Push vom Bot (WebSocket), bis zu 4×/s" : "Abfrage alle 2 s (Live-Verbindung nicht aktiv)"};
-      Kapitalverlauf: Punkt pro Minute + Live-Punkt</div>`;
+      Kapitalverlauf: Punkt pro Minute + Live-Punkt</div>`, `
+    <div>Prices of open positions</div><div><b>⚡ Live from the blockchain</b> (Helius, on every trade in the pool, ~0.5–1 s) for PumpSwap pools.
+      Other pools: DexScreener every 2 s (DexScreener itself lags a few seconds). Status: ${feed}</div>
+    <div>Stop-loss / take-profit</div><div>checked immediately on every new price</div>
+    <div>Watchlist</div><div>DexScreener, every candidate every 30 s</div>
+    <div>New candidates</div><div>graduations live (Helius + PumpPortal), GeckoTerminal/DexScreener lists every minute</div>
+    <div>Phase & security check</div><div>GeckoTerminal candles and RugCheck, only right before a buy</div>
+    <div>Status line at the top</div><div>"active X s ago" = when the bot last finished a round (should be a few seconds, otherwise it is stuck).
+      "Watchlist N coins, max. Y s old" = age of the data of the coin that has gone unchecked the longest (cycle ~30 s)</div>
+    <div>This interface</div><div>${wsLive ? "⚡ live push from the bot (WebSocket), up to 4×/s" : "polling every 2 s (live connection not active)"};
+      equity curve: one point per minute + live point</div>`);
 }
 
-async function loadControl() {
+async function loadConfig() {
   renderDataInfo();
   $("cfg").textContent = JSON.stringify(await api("/api/config"), null, 2);
   if (settingsLoaded) return;          // Eingaben beim Auto-Refresh nicht überschreiben
   const items = await api("/api/settings");
-  $("settingsForm").innerHTML = items.map((it) => `<label for="s_${esc(it.key)}">${esc(it.label)}</label>` + (it.options
-    ? `<select id="s_${esc(it.key)}" data-key="${esc(it.key)}">${Object.entries(it.options).map(([v, l]) =>
+  const lbl = (it) => (LANG === "en" ? it.label_en || it.label : it.label);
+  $("settingsForm").innerHTML = items.map((it) => `<label for="s_${esc(it.key)}">${esc(lbl(it))}</label>` + (it.options
+    ? `<select id="s_${esc(it.key)}" data-key="${esc(it.key)}">${Object.entries(LANG === "en" && it.options_en ? it.options_en : it.options).map(([v, l]) =>
         `<option value="${esc(v)}" ${v === it.value ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`
     : `<input id="s_${esc(it.key)}" data-key="${esc(it.key)}" type="number" inputmode="decimal" step="any"
       min="${it.min}" max="${it.max}" value="${it.value}">`)).join("");
@@ -333,9 +380,9 @@ $("saveSettings").onclick = async () => {
   document.querySelectorAll("#settingsForm input, #settingsForm select").forEach((i) => body[i.dataset.key] = i.value);
   const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json();
-  $("settingsMsg").textContent = r.ok ? "Gespeichert ✓" : "Fehler: " + (j.detail || r.status);
+  $("settingsMsg").textContent = r.ok ? L("Gespeichert ✓", "Saved ✓") : L("Fehler: ", "Error: ") + (j.detail || r.status);
   $("settingsMsg").className = "hint " + (r.ok ? "pos" : "neg");
-  if (r.ok) { settingsLoaded = false; loadControl(); }
+  if (r.ok) { settingsLoaded = false; loadConfig(); }
 };
 
 // ---------------------------------------------------------------- Refresh
@@ -346,14 +393,14 @@ async function refresh() {
     else if (tab === "trades") await loadTrades();
     else if (tab === "agents") await loadAgents();
     else if (tab === "analysis") await loadAnalysis();
-    else if (tab === "control") await loadControl();
+    else if (tab === "config") await loadConfig();
   } catch (e) {
     $("statusDot").className = "dot bad";
-    $("statusLine").textContent = "Keine Verbindung zum Bot (" + e.message + ")";
+    $("statusLine").textContent = L("Keine Verbindung zum Bot (", "No connection to the bot (") + e.message + ")";
   }
 }
+
 // ---------------------------------------------------------------- Live-Push vom Bot (WebSocket)
-let wsLive = false, ws = null;
 async function connectWs() {
   try {
     const { token } = await api("/api/ws-token");
@@ -371,11 +418,11 @@ async function connectWs() {
 connectWs();
 
 refresh();
-// Übersicht alle 2 s (nur Datenbank-Lesen, belastet den Bot nicht), andere Tabs alle 5 s
+// Übersicht alle 2 s ohne Live-Verbindung, andere Tabs alle 10 s
 let tick = 0;
 setInterval(() => {
   tick++;
   if (document.hidden || !$("modal").classList.contains("hidden")) return;
-  if ((tab === "overview" && !wsLive) || tick % 5 === 0) refresh();   // mit Live-Verbindung kommt die Übersicht per Push
+  if ((tab === "overview" && !wsLive) || tick % 5 === 0) refresh();
 }, 2000);
 window.addEventListener("resize", () => tab === "overview" && loadEquity());

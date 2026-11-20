@@ -8,6 +8,29 @@ from __future__ import annotations
 from typing import Any
 
 # Schlüssel -> (Typ, min, max, Beschreibung)
+# Englische Bezeichnungen für die Web-Oberfläche
+LABELS_EN: dict[str, str] = {
+    'Ausstiegs-Modus': 'Exit mode',
+    'Stop-Loss in %': 'Stop-loss in %',
+    'Einfach-Modus: Take-Profit in % (alles verkaufen)': 'Simple mode: take-profit in % (sell all)',
+    'SL über Entry ziehen, sobald Gewinn erreicht in % (0 = aus)': 'Move SL above entry once profit reaches % (0 = off)',
+    'Neuer SL: Prozent über Entry': 'New SL: percent above entry',
+    'Take-Profit 1: Gewinn in %': 'Take-profit 1: profit in %',
+    'Take-Profit 1: Anteil verkaufen (0–1)': 'Take-profit 1: share to sell (0–1)',
+    'Take-Profit 2: Gewinn in %': 'Take-profit 2: profit in %',
+    'Take-Profit 2: Anteil verkaufen (0–1)': 'Take-profit 2: share to sell (0–1)',
+    'Trailing-Stop aktiv ab Gewinn in %': 'Trailing stop active from profit in %',
+    'Trailing-Stop: Abstand vom Hoch in %': 'Trailing stop: distance from high in %',
+    'Zeitlimit in Minuten': 'Time limit in minutes',
+    'Kaufschwelle (Score)': 'Buy threshold (score)',
+    'Coins höchstens so alt (Minuten)': 'Max. coin age (minutes)',
+    'Watchlist: Coin erneut prüfen nach (Sekunden)': 'Watchlist: recheck coin after (seconds)',
+    'Hauptzyklus (Sekunden)': 'Main cycle (seconds)',
+    'Positionsgröße (Anteil vom Kapital)': 'Position size (share of capital)',
+    'max. offene Positionen': 'max. open positions',
+}
+CHOICES_EN = {"exit.mode": {"ladder": "Ladder (break-even, 2 TPs, trailing)", "simple": "Simple (one TP + SL)"}}
+
 CHOICES: dict[str, tuple[dict[str, str], str]] = {
     "exit.mode": ({"ladder": "Leiter (Break-even, 2 TPs, Trailing)", "simple": "Einfach (ein TP + SL)"},
                   "Ausstiegs-Modus"),
