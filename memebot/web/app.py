@@ -70,7 +70,7 @@ def create_app(bot: "Bot") -> FastAPI:
             "equity_sol": equity, "cash_sol": cash, "start_sol": base,
             "total_return_pct": (equity / base - 1) * 100 if base else 0,
             "unrealized_sol": sum(p["unrealized_sol"] for p in open_pos),
-            "open_count": len(open_pos),
+            "open_count": len(open_pos), "min_score": bot.cfg.strategy.min_score,
             "watchlist": db.one("SELECT COUNT(*) AS n FROM candidates WHERE status IN ('new','waiting')")["n"],
             "stats": st["gesamt"], "last24h": st["letzte_24h"],
         }
@@ -115,8 +115,14 @@ def create_app(bot: "Bot") -> FastAPI:
 
     @app.get("/api/candidates")
     def candidates(limit: int = 100, _: None = Depends(auth)):
-        return db.q("SELECT * FROM candidates ORDER BY COALESCE(last_checked, first_seen) DESC LIMIT ?",
+        rows = db.q("SELECT * FROM candidates ORDER BY COALESCE(last_checked, first_seen) DESC LIMIT ?",
                     (min(limit, 1000),))
+        for r in rows:
+            try:
+                r["details"] = json.loads(r["details"]) if r.get("details") else {}
+            except ValueError:
+                r["details"] = {}
+        return rows
 
     @app.get("/api/analysis")
     def analysis(_: None = Depends(auth)):

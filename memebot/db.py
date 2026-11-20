@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS candidates (
     last_checked REAL,
     status TEXT NOT NULL DEFAULT 'new',           -- new | waiting | rejected | bought | expired
     reason TEXT,
-    score REAL
+    score REAL,
+    details TEXT
 );
 
 CREATE TABLE IF NOT EXISTS equity (
@@ -98,6 +99,13 @@ class DB:
         self.lock = threading.RLock()
         with self.lock:
             self.conn.executescript(SCHEMA)
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """Spalten nachrüsten, die in älteren Datenbanken fehlen."""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(candidates)")}
+        if "details" not in cols:
+            self.conn.execute("ALTER TABLE candidates ADD COLUMN details TEXT")
 
     # ------------------------------------------------------------- basics
     def q(self, sql: str, args: tuple | list = ()) -> list[dict]:
@@ -174,9 +182,11 @@ class DB:
             return cur.rowcount > 0
 
     def set_candidate(self, mint: str, status: str, reason: str = "", score: float | None = None,
-                      symbol: str | None = None) -> None:
+                      symbol: str | None = None, details: dict | None = None) -> None:
         self.x("UPDATE candidates SET status=?, reason=?, score=COALESCE(?,score), symbol=COALESCE(?,symbol),"
-               " last_checked=? WHERE mint=?", (status, reason, score, symbol, time.time(), mint))
+               " details=COALESCE(?,details), last_checked=? WHERE mint=?",
+               (status, reason, score, symbol, json.dumps(details) if details is not None else None,
+                time.time(), mint))
 
     def due_candidates(self, recheck_s: float, limit: int) -> list[dict]:
         return self.q("SELECT * FROM candidates WHERE status IN ('new','waiting') AND"

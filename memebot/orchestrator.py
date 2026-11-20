@@ -53,45 +53,65 @@ class Bot:
         if m is None:
             self.db.set_candidate(mint, "waiting", "noch keine Marktdaten")
             return
+        # Score immer berechnen (billig) und speichern -> in der Watchlist nachvollziehbar
+        score, details = self.strategist.score(m)
+
+        def mark(status: str, reason: str) -> None:
+            self.db.set_candidate(mint, status, reason, score, m.symbol, details)
+
         v = self.strategist.prefilter(m)
         if not v.ok:
-            self.db.set_candidate(mint, "waiting" if v.retry else "expired", v.reason, symbol=m.symbol)
+            mark("waiting" if v.retry else "expired", v.reason)
             return
         cap = self.risk.capacity()
         if not cap.ok:
-            self.db.set_candidate(mint, "waiting", cap.reason, symbol=m.symbol)
+            mark("waiting", cap.reason)
             return
-        score, details = self.strategist.score(m)
         if score < self.cfg.strategy.min_score:
-            self.db.set_candidate(mint, "waiting", f"Score {score:.0f} unter {self.cfg.strategy.min_score}",
-                                  score, m.symbol)
+            mark("waiting", f"Score {score:.0f} unter {self.cfg.strategy.min_score}")
             return
         sec = await self.rug.check(m)
         if not sec.ok:
-            self.db.set_candidate(mint, "waiting" if sec.retry else "rejected", sec.reason, score, m.symbol)
+            mark("waiting" if sec.retry else "rejected", sec.reason)
             return
         appr = await self.risk.approve(m, score)
         if not appr.ok:
-            self.db.set_candidate(mint, "waiting" if appr.retry else "rejected", appr.reason, score, m.symbol)
+            mark("waiting" if appr.retry else "rejected", appr.reason)
             return
         size = appr.details["size_sol"]
         dec = await self.executor.decimals(m.mint, sec.details.get("decimals"))
         st = await self.rug.sell_test(m, size, dec)
         if not st.ok:
-            self.db.set_candidate(mint, "waiting" if st.retry else "rejected", st.reason, score, m.symbol)
+            mark("waiting" if st.retry else "rejected", st.reason)
             self.rug.log(f"{m.symbol}: {st.reason}", mint=mint)
             return
-        self.strategist.log(f"{m.symbol}: Signal Score {score:.0f} – {details}", mint=mint)
+        self.strategist.log(f"{m.symbol}: Signal Score {score:.0f}", mint=mint)
         pid = await self.positions.open(Signal(m, score, details, sec.details), size)
-        self.db.set_candidate(mint, "bought" if pid else "waiting", "gekauft" if pid else "Kauf fehlgeschlagen",
-                              score, m.symbol)
+        mark("bought" if pid else "waiting", "gekauft" if pid else "Kauf fehlgeschlagen")
 
-    async def cycle(self) -> None:
-        self.cycle_no += 1
+    async def position_tick(self) -> None:
         open_pos = self.db.open_positions(self.ctx.mode)
         if open_pos:
             markets = await self.ctx.dex.markets([p["mint"] for p in open_pos])
             await self.positions.tick(markets)
+
+    async def position_loop(self) -> None:
+        """Eigene schnelle Schleife für offene Positionen (Stop-Loss, Take-Profit, Trailing)."""
+        interval = float(self.cfg.get("position_poll_seconds", 3))
+        while not self.stop.is_set():
+            t0 = time.monotonic()
+            try:
+                await self.position_tick()
+            except Exception as e:
+                log.exception("Positions-Schleife")
+                self.db.log("Position-Manager", f"Fehler: {e}", "error")
+            try:
+                await asyncio.wait_for(self.stop.wait(), timeout=max(0.5, interval - (time.monotonic() - t0)))
+            except asyncio.TimeoutError:
+                pass
+
+    async def cycle(self) -> None:
+        self.cycle_no += 1
         if self.cycle_no % 4 == 1:
             await self.scout.discover_lists()
             self.scout.trim_watchlist()
@@ -115,7 +135,7 @@ class Bot:
     async def run(self) -> None:
         self.db.log("Orchestrator", f"Bot gestartet im Modus {self.ctx.mode.upper()}"
                     + (f", Wallet {self.wallet}" if self.wallet else ""))
-        tasks = []
+        tasks = [asyncio.create_task(self.position_loop())]
         if self.cfg.scout.use_pumpportal:
             tasks.append(asyncio.create_task(
                 stream_migrations(self.cfg.api.pumpportal_ws, self.scout.on_migration, self.stop,

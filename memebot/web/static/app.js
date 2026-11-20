@@ -141,13 +141,23 @@ async function loadTrades() {
   bindRows($("tradeList"));
 }
 
+const PARTS = ["kaufdruck", "volumen_beschleunigung", "momentum", "trend", "beteiligung", "liquiditaet"];
+function scoreBlock(sd) {
+  const bars = PARTS.filter((k) => k in sd).map((k) =>
+    `<div>${k.replaceAll("_", " ")}</div><div>${sd[k]}<div class="bar"><i style="width:${sd[k]}%"></i></div></div>`).join("");
+  return `<div class="kv">${bars}
+      <div>Kauf/Verkauf 5m</div><div>${sd.kauf_verkauf ?? "–"}</div>
+      <div>Volumen-Beschl.</div><div>${sd.vol_beschl ?? "–"}×</div>
+      <div>Kurs 5m / 1h</div><div>${pct(sd.chg_m5)} / ${pct(sd.chg_h1)}</div>
+      <div>Liquidität / FDV</div><div>$${(sd.liq_usd || 0).toLocaleString("de-DE")} / $${(sd.fdv_usd || 0).toLocaleString("de-DE")}</div>
+      <div>Alter</div><div>${sd.alter_min ?? "–"} min</div>
+    </div>`;
+}
+
 async function showPosition(id) {
   const p = await api("/api/positions/" + id);
   const open = p.status === "open";
   const sd = p.score_details || {}, sec = p.security || {};
-  const parts = ["kaufdruck", "volumen_beschleunigung", "momentum", "trend", "beteiligung", "liquiditaet"];
-  const bars = parts.filter((k) => k in sd).map((k) =>
-    `<div>${k.replaceAll("_", " ")}</div><div>${sd[k]}<div class="bar"><i style="width:${sd[k]}%"></i></div></div>`).join("");
   const fills = p.fills.map((f) => `<tr><td>${dt(f.ts)}</td><td>${f.side === "buy" ? "Kauf" : "Verkauf"}</td>
     <td class="num">${sol(f.sol_amount)}</td><td>${esc(f.reason)}</td>
     <td>${f.signature && f.signature !== "paper" ? `<a href="https://solscan.io/tx/${esc(f.signature)}" target="_blank">Tx</a>` : "paper"}</td></tr>`).join("");
@@ -166,13 +176,7 @@ async function showPosition(id) {
         <a href="https://rugcheck.xyz/tokens/${esc(p.mint)}" target="_blank">RugCheck</a></div>
     </div>
     <h2>Warum gekauft (Stratege)</h2>
-    <div class="kv">${bars}
-      <div>Kauf/Verkauf 5m</div><div>${sd.kauf_verkauf ?? "–"}</div>
-      <div>Volumen-Beschl.</div><div>${sd.vol_beschl ?? "–"}×</div>
-      <div>Kurs 5m / 1h</div><div>${pct(sd.chg_m5)} / ${pct(sd.chg_h1)}</div>
-      <div>Liquidität / FDV</div><div>$${(sd.liq_usd || 0).toLocaleString("de-DE")} / $${(sd.fdv_usd || 0).toLocaleString("de-DE")}</div>
-      <div>Alter beim Kauf</div><div>${sd.alter_min ?? "–"} min</div>
-    </div>
+    ${scoreBlock(sd)}
     <h2>Sicherheit (Rug-Analyst)</h2>
     <div class="kv">
       <div>RugCheck-Score</div><div>${sec.score ?? "–"}</div>
@@ -198,12 +202,33 @@ async function loadAgents() {
     api("/api/candidates?limit=80"),
     api("/api/events?limit=200" + ($("agentFilter").value ? "&agent=" + encodeURIComponent($("agentFilter").value) : "")),
   ]);
+  candCache = cands;
   $("candTable").innerHTML = `<tr><th>Token</th><th>Status</th><th class="num">Score</th><th>Grund</th><th>Quelle</th><th>geprüft</th></tr>` +
-    cands.map((c) => `<tr><td>${esc(c.symbol || c.mint.slice(0, 6))}</td><td><span class="tag ${esc(c.status)}">${esc(STATUS_DE[c.status] || c.status)}</span></td>
+    cands.map((c, i) => `<tr class="click" data-i="${i}"><td>${esc(c.symbol || c.mint.slice(0, 6))}</td><td><span class="tag ${esc(c.status)}">${esc(STATUS_DE[c.status] || c.status)}</span></td>
       <td class="num">${c.score != null ? Math.round(c.score) : "–"}</td><td>${esc(c.reason)}</td><td>${esc(c.source)}</td>
       <td>${c.last_checked ? ago(c.last_checked) : "–"}</td></tr>`).join("");
+  $("candTable").querySelectorAll("tr.click").forEach((r) => r.onclick = () => showCandidate(candCache[+r.dataset.i]));
   $("eventLog").innerHTML = evs.map((e) => `<div class="${esc(e.level)}"><span class="t">${dt(e.ts)}</span>
     <span class="a">${esc(e.agent)}</span> ${esc(e.message)}</div>`).join("") || `<div class="empty">Noch keine Einträge.</div>`;
+}
+
+let candCache = [];
+function showCandidate(c) {
+  const sd = c.details || {};
+  $("modalContent").innerHTML = `
+    <h2>${esc(c.symbol || c.mint.slice(0, 6))} <span class="tag ${esc(c.status)}">${esc(STATUS_DE[c.status] || c.status)}</span></h2>
+    <div class="kv">
+      <div>Score</div><div>${c.score != null ? Math.round(c.score) : "–"} (Kaufschwelle ${lastSummary?.min_score ?? "–"})</div>
+      <div>Entscheidung</div><div>${esc(c.reason)}</div>
+      <div>Quelle</div><div>${esc(c.source)}</div>
+      <div>Entdeckt / geprüft</div><div>vor ${ago(c.first_seen)} / ${c.last_checked ? "vor " + ago(c.last_checked) : "–"}</div>
+      <div>Mint</div><div style="word-break:break-all">${esc(c.mint)}</div>
+      <div>Links</div><div><a href="https://dexscreener.com/solana/${esc(c.mint)}" target="_blank">DexScreener</a> ·
+        <a href="https://rugcheck.xyz/tokens/${esc(c.mint)}" target="_blank">RugCheck</a></div>
+    </div>
+    <h2>Bewertung (Stratege)</h2>
+    ${Object.keys(sd).length ? scoreBlock(sd) : `<p class="muted">Noch keine Marktdaten.</p>`}`;
+  $("modal").classList.remove("hidden");
 }
 
 // ---------------------------------------------------------------- Analyse
