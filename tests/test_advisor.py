@@ -46,6 +46,10 @@ def test_advisor_requires_enough_trades_and_filters_invalid(tmp_path):
     c = TestClient(create_app(bot))
     add_trades(bot, 10)
     assert c.post("/api/advisor/suggest", json={}).status_code == 400          # zu wenig Trades
+    low = c.post("/api/advisor/suggest", json={"force": True}).json()          # trotzdem möglich
+    assert low["low_data"] and low["confidence"] == "low"
+    assert "Only 10 closed trades" in calls[-1]["messages"][0]["content"]
+    calls.clear()
     add_trades(bot, 25, t0=time.time() - 50000)                                  # alle vor der Übernahme
     r = c.post("/api/advisor/suggest", json={"model": "claude-haiku-5-5"})
     assert r.status_code == 200, r.text
