@@ -71,7 +71,22 @@ def apply(cfg, values: dict[str, Any]) -> None:
     cfg["exit"]["take_profit_levels"] = [lv for lv in sorted(levels) if lv[1] > 0]
 
 
+# Einmalige Umstellung auf die stimmige Ausstiegs-Leiter (v2). Wird beim ersten Start nach dem
+# Update in die gespeicherten Einstellungen geschrieben und hat damit Vorrang vor alten Werten
+# in der config.toml. Danach lassen sich die Werte wie gewohnt in der Web-UI ändern.
+EXIT_V2 = {
+    "exit.stop_loss_pct": 20, "exit.breakeven_activate_pct": 25, "exit.breakeven_floor_pct": 3,
+    "exit.tp1_pct": 30, "exit.tp1_fraction": 0.33, "exit.tp2_pct": 80, "exit.tp2_fraction": 0.33,
+    "exit.trailing_activate_pct": 50, "exit.trailing_stop_pct": 20, "exit.max_hold_min": 120,
+}
+
+
 def load_into(cfg, db) -> None:
+    if not db.get("migration_exit_v2"):
+        db.set("overrides", {**(db.get("overrides") or {}), **EXIT_V2})
+        db.set("migration_exit_v2", True)
+        db.log("Orchestrator", "Ausstiegsregeln auf v2 umgestellt (Break-even ab +25 %, TP1 +30 %, "
+                               "Trailing ab +50 %, TP2 +80 %, Zeitlimit 2 h)")
     saved = db.get("overrides") or {}
     if saved:
         try:

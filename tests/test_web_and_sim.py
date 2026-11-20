@@ -82,3 +82,16 @@ def test_settings_change_applies_live_and_persists(tmp_path):
     # Neustart: Werte kommen aus der Datenbank zurück
     bot2 = make_bot(tmp_path)
     assert bot2.cfg["exit"]["take_profit_levels"][0][0] == 25 and bot2.cfg["exit"]["stop_loss_pct"] == 15
+
+
+def test_exit_v2_migration_overrides_old_config(tmp_path):
+    cfg_old = {"take_profit_levels": [[40, 0.33], [100, 0.33]], "trailing_activate_pct": 30,
+               "trailing_stop_pct": 18, "max_hold_min": 180}
+    bot = make_bot(tmp_path)
+    assert bot.cfg["exit"]["take_profit_levels"][0][0] == 30
+    # Simuliert alte config.toml-Werte + Neustart: Migration läuft nur einmal, gespeicherte Werte gewinnen
+    bot.cfg["exit"].update(cfg_old)
+    bot2 = make_bot(tmp_path)
+    e = bot2.cfg["exit"]
+    assert e["take_profit_levels"] == [[30.0, 0.33], [80.0, 0.33]] and e["trailing_activate_pct"] == 50
+    assert e["max_hold_min"] == 120 and e["breakeven_activate_pct"] == 25
