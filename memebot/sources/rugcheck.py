@@ -17,19 +17,31 @@ class RugCheck:
             return None
 
 
+def _addresses(value: Any) -> list[str]:
+    """Adressen aus einem Feld holen – RugCheck liefert mal Strings, mal Objekte (z. B. liquidityAAccount)."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [v for k, v in value.items() if k in ("pubkey", "address", "owner") and isinstance(v, str)]
+    return []
+
+
 def summarize_report(rep: dict[str, Any]) -> dict[str, Any]:
-    """Robuste Auswertung des RugCheck-Berichts (Felder können fehlen)."""
+    """Robuste Auswertung des RugCheck-Berichts (Felder können fehlen oder anders aufgebaut sein)."""
     known = rep.get("knownAccounts") or {}
-    skip = {addr for addr, info in known.items()
-            if str((info or {}).get("type", "")).upper() in {"AMM", "LOCKER", "DEX"}}
+    skip: set[str] = {addr for addr, info in known.items()
+                      if isinstance(info, dict) and str(info.get("type", "")).upper() in {"AMM", "LOCKER", "DEX"}}
     for m in rep.get("markets") or []:
+        if not isinstance(m, dict):
+            continue
         for k in ("pubkey", "liquidityA", "liquidityB", "liquidityAAccount", "liquidityBAccount"):
-            if m.get(k):
-                skip.add(m[k])
+            skip.update(_addresses(m.get(k)))
 
     holders = []
     for h in rep.get("topHolders") or []:
-        if h.get("address") in skip or h.get("owner") in skip:
+        if not isinstance(h, dict):
+            continue
+        if set(_addresses(h.get("address")) + _addresses(h.get("owner"))) & skip:
             continue
         holders.append(float(h.get("pct") or 0))
     holders.sort(reverse=True)

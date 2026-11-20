@@ -76,6 +76,19 @@ def test_rug_pool_excluded_and_passes(ctx):
     assert RugAnalyst(ctx).evaluate(s).ok
 
 
+def test_rug_market_accounts_as_objects(ctx):
+    """Echte RugCheck-Berichte enthalten Konten als Objekte – darf nicht abstürzen."""
+    rep = report(markets=[{"pubkey": "MKT", "liquidityA": "LA",
+                           "liquidityAAccount": {"mint": "M", "owner": "POOLAUTH", "amount": 5},
+                           "liquidityBAccount": {"mint": "SOL", "owner": "POOLAUTH"},
+                           "lp": {"lpLockedPct": 100}}],
+                 topHolders=[{"address": "LA", "owner": "POOLAUTH", "pct": 30}]
+                 + [{"address": f"a{i}", "owner": f"o{i}", "pct": 2} for i in range(10)])
+    s = summarize_report(rep)
+    assert s["top10_pct"] == 20                 # Pool-Konto nicht als Holder gezählt
+    assert RugAnalyst(ctx).evaluate(s).ok
+
+
 @pytest.mark.parametrize("kw", [
     {"mintAuthority": "X"}, {"freezeAuthority": "X"}, {"rugged": True},
     {"markets": [{"lp": {"lpLockedPct": 10}}]},
