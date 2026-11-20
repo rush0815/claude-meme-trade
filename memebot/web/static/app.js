@@ -60,7 +60,7 @@ function renderSummary(s) {
   $("modeBadge").textContent = s.sim ? "SIMULATION" : s.mode.toUpperCase();
   $("modeBadge").className = "badge " + s.mode;
   $("statusLine").textContent = (s.killed ? "NOT-AUS aktiv · " : s.paused ? "pausiert · " : "") +
-    `${s.status} · letzter Zyklus vor ${s.last_cycle ? ago(s.last_cycle) : "–"} · Watchlist ${s.watchlist}` +
+    `${s.status} · letzter Zyklus vor ${s.last_cycle ? ago(s.last_cycle) : "–"} · Watchlist ${s.watchlist}${s.watch_oldest_s != null ? " (Durchlauf " + Math.round(s.watch_oldest_s) + " s)" : ""}` +
     (wsLive ? " · ⚡ Live" : "");
   const st = s.stats;
   $("kpis").innerHTML =

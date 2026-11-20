@@ -37,6 +37,10 @@ class Strategist(Agent):
         sc, f, st = self.cfg.scout, self.cfg.filters, self.cfg.strategy
         if m.age_min > sc.max_age_min:
             return Verdict(False, f"zu alt ({m.age_min / 60:.0f} h)")
+        dead_after = float(sc.get("dead_after_min", 60))
+        if m.age_min > dead_after and (m.liquidity_usd < float(sc.get("dead_liquidity_usd", 5000))
+                                       or m.volume_h1 < float(sc.get("dead_volume_h1_usd", 2000))):
+            return Verdict(False, "eingeschlafen (kaum Liquidität/Volumen)")   # endgültig raus
         if m.age_min < sc.min_age_min:
             return Verdict(False, f"zu jung ({m.age_min:.0f} min)", retry=True)
         if m.price_sol <= 0:

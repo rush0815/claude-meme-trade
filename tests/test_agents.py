@@ -255,3 +255,18 @@ def test_simple_mode_with_sl_moved_above_entry(ctx):
     run(pm.tick({"M1": good_market(price_sol=entry * 1.015)}))   # +1,5 %: unter neuem SL
     p = ctx.db.position(pid)
     assert p["status"] == "closed" and p["exit_reason"] == "Break-even-Stop"
+
+
+def test_dead_coin_leaves_watchlist(ctx):
+    v = Strategist(ctx).prefilter(good_market(created_at=time.time() - 90 * 60, liquidity_usd=3000))
+    assert not v.ok and not v.retry and "eingeschlafen" in v.reason
+
+
+def test_due_candidates_fair_order(ctx):
+    db = ctx.db
+    for i, m in enumerate(["OLD", "MID", "NEW"]):
+        db.upsert_candidate(m, "t")
+    db.x("UPDATE candidates SET status='waiting', last_checked=? WHERE mint='OLD'", (time.time() - 300,))
+    db.x("UPDATE candidates SET status='waiting', last_checked=? WHERE mint='MID'", (time.time() - 100,))
+    order = [c["mint"] for c in db.due_candidates(30, 10)]
+    assert order == ["NEW", "OLD", "MID"]      # neue zuerst, dann am längsten ungeprüfte

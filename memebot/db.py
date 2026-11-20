@@ -196,7 +196,8 @@ class DB:
 
     def due_candidates(self, recheck_s: float, limit: int) -> list[dict]:
         return self.q("SELECT * FROM candidates WHERE status IN ('new','waiting') AND"
-                      " (last_checked IS NULL OR last_checked < ?) ORDER BY first_seen DESC LIMIT ?",
+                      " (last_checked IS NULL OR last_checked < ?)"
+                      " ORDER BY last_checked IS NOT NULL, last_checked ASC LIMIT ?",   # neue zuerst, dann am längsten ungeprüfte
                       (time.time() - recheck_s, limit))
 
     # ------------------------------------------------------------- equity
