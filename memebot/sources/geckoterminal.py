@@ -55,3 +55,10 @@ class GeckoTerminal:
                 break
             found += [(m, src) for m in self._mints(payload)]
         return found
+
+    async def candles(self, pool: str, minutes: int = 15, limit: int = 100) -> list[list[float]]:
+        """OHLCV-Kerzen [ts, o, h, l, c, v] eines Pools, älteste zuerst."""
+        payload = await self.http.get(f"/networks/solana/pools/{pool}/ohlcv/minute",
+                                      params={"aggregate": str(minutes), "limit": str(limit)}, retries=2)
+        rows = (((payload or {}).get("data") or {}).get("attributes") or {}).get("ohlcv_list") or []
+        return sorted(([float(x) for x in r[:6]] for r in rows if len(r) >= 6), key=lambda r: r[0])

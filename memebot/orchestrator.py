@@ -8,6 +8,7 @@ import time
 from .agents.analyst import Analyst
 from .agents.base import Ctx
 from .agents.executor import LiveExecutor, PaperExecutor
+from .agents.phase_analyst import PhaseAnalyst
 from .agents.position_manager import PositionManager
 from .agents.risk_manager import Portfolio, RiskManager
 from .agents.rug_analyst import RugAnalyst
@@ -40,6 +41,7 @@ class Bot:
         self.wallet = wallet
         self.scout = Scout(ctx)
         self.rug = RugAnalyst(ctx)
+        self.phase = PhaseAnalyst(ctx)
         self.strategist = Strategist(ctx)
         self.risk = RiskManager(ctx, self.portfolio)
         self.positions = PositionManager(ctx, self.executor, self.portfolio)
@@ -74,6 +76,12 @@ class Bot:
         sec = await self.rug.check(m)
         if not sec.ok:
             mark("waiting" if sec.retry else "rejected", sec.reason)
+            return
+        ph = await self.phase.check(m)
+        if ph.details:
+            details.update({k: v for k, v in ph.details.items() if k in ("vom_hoch_pct", "std_seit_hoch")})
+        if not ph.ok:
+            mark("waiting" if ph.retry else "rejected", ph.reason)
             return
         appr = await self.risk.approve(m, score)
         if not appr.ok:

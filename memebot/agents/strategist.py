@@ -51,6 +51,10 @@ class Strategist(Agent):
             return Verdict(False, f"Volumen 1h ${m.volume_h1:,.0f} zu gering", retry=True)
         if m.buys_m5 + m.sells_m5 < f.min_txns_m5:
             return Verdict(False, "zu wenig Trades (5 min)", retry=True)
+        if m.change_h6 < -float(st.get("max_drop_h6_pct", 35)):
+            return Verdict(False, f"Abwärtstrend 6 h ({m.change_h6:.0f}%) – Hype vorbei", retry=True)
+        if m.change_h1 < -float(st.get("max_drop_h1_pct", 25)):
+            return Verdict(False, f"Abverkauf 1 h ({m.change_h1:.0f}%)", retry=True)
         if m.change_m5 > st.max_change_m5_pct:
             return Verdict(False, f"FOMO-Spitze (+{m.change_m5:.0f}% in 5 min)", retry=True)
         if m.change_m5 < st.min_change_m5_pct:

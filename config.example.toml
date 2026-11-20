@@ -26,7 +26,7 @@ use_helius_migrations = true    # Graduations direkt aus der Blockchain (braucht
 use_dexscreener_lists = true    # neue Profile + Boosts von DexScreener
 use_geckoterminal = true        # neue + trendende Solana-Pools (beste Quelle für graduierte Coins)
 min_age_min = 15                # ganz frische Launches meiden (Sniper/Rugs)
-max_age_min = 1440
+max_age_min = 480              # 8 h: danach ist der Hype meist vorbei
 recheck_seconds = 30            # Kandidat erneut prüfen, wenn er noch nicht reif war
 max_watchlist = 400
 
@@ -52,6 +52,14 @@ min_score = 65                   # 0–100
 max_change_m5_pct = 35           # oberhalb: FOMO-Spitze, nicht kaufen
 min_change_m5_pct = 1.5
 min_buy_sell_ratio_m5 = 1.25
+max_drop_h1_pct = 25             # Kurs in 1 h stärker gefallen -> kein Einstieg (Abverkauf läuft)
+max_drop_h6_pct = 35             # Kurs in 6 h stärker gefallen -> kein Einstieg (Hype vorbei)
+
+[phase]
+# Phasen-Check vor jedem Kauf: Kursverlauf seit Launch (GeckoTerminal-Kerzen)
+enabled = true
+max_drawdown_from_high_pct = 40  # mehr als 40 % unter dem bisherigen Hoch -> nicht kaufen
+max_hours_since_high = 3         # Hoch liegt länger zurück UND Kurs > 25 % darunter -> nicht kaufen
 
 [risk]
 position_pct = 0.03              # Anteil vom Kapital pro Trade

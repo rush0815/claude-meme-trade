@@ -174,3 +174,36 @@ def test_force_close(ctx):
     ctx.db.update_position(pid, force_close=1)
     run(pm.tick({}))
     assert ctx.db.position(pid)["status"] == "closed"
+
+
+# ---------------------------------------------------------------- Phasen-Analyst
+from memebot.agents.phase_analyst import PhaseAnalyst, analyse  # noqa: E402
+
+
+def candles_from(closes, step_s=900):
+    t0 = time.time() - len(closes) * step_s
+    return [[t0 + i * step_s, c, c * 1.5, c * 0.9, c, 1000] for i, c in enumerate(closes)]
+
+
+def test_phase_rejects_dead_coin_like_ogta(ctx):
+    # Hype auf 1,2M, Absturz auf 0,16M, kleiner Hüpfer am Ende (wie OGTA)
+    closes = [0.1, 0.8, 1.2, 1.0, 0.9, 0.6, 0.45, 0.5, 0.6, 0.4, 0.3, 0.2, 0.17, 0.16, 0.19]
+    v = PhaseAnalyst(ctx).judge(analyse(candles_from(closes)))
+    assert not v.ok and "Hype vorbei" in v.reason
+
+
+def test_phase_accepts_early_trend(ctx):
+    closes = [0.1, 0.12, 0.15, 0.14, 0.18, 0.22, 0.21, 0.25]
+    v = PhaseAnalyst(ctx).judge(analyse(candles_from(closes)))
+    assert v.ok
+
+
+def test_phase_ignores_single_wick(ctx):
+    c = candles_from([0.2, 0.25, 0.3, 0.28, 0.31])
+    c[2][2] = 3.0                                   # Docht bis 10x – zählt nicht als Hoch
+    assert PhaseAnalyst(ctx).judge(analyse(c)).ok
+
+
+def test_prefilter_rejects_6h_downtrend(ctx):
+    v = Strategist(ctx).prefilter(good_market(change_h6=-60))
+    assert not v.ok and "Hype vorbei" in v.reason
