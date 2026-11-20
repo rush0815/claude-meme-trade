@@ -79,3 +79,4 @@ tr.click { cursor: pointer; }
 .form select { grid-column: 1 / -1; padding: 8px; font-size: 15px; }
 .form input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
   padding: 8px; font-size: 16px; width: 100%; text-align: right; }
+table.fills td { white-space: normal; vertical-align: top; } table.fills td.num { white-space: nowrap; }
