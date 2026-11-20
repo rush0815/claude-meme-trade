@@ -270,3 +270,16 @@ def test_due_candidates_fair_order(ctx):
     db.x("UPDATE candidates SET status='waiting', last_checked=? WHERE mint='MID'", (time.time() - 100,))
     order = [c["mint"] for c in db.due_candidates(30, 10)]
     assert order == ["NEW", "OLD", "MID"]      # neue zuerst, dann am längsten ungeprüfte
+
+
+def test_holder_concentration_is_retryable(ctx):
+    v = RugAnalyst(ctx).evaluate(summarize_report(report(topHolders=[{"address": "w", "pct": 30}])))
+    assert not v.ok and v.retry
+    v = RugAnalyst(ctx).evaluate(summarize_report(report(mintAuthority="X")))
+    assert not v.ok and not v.retry                                 # Mint-Authority bleibt endgültig
+
+
+def test_phase_drawdown_is_retryable(ctx):
+    closes = [0.1, 0.8, 1.2, 1.0, 0.6, 0.3, 0.2]
+    v = PhaseAnalyst(ctx).judge(analyse(candles_from(closes)))
+    assert not v.ok and v.retry

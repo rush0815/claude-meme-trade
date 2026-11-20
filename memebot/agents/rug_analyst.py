@@ -27,9 +27,9 @@ class RugAnalyst(Agent):
         if s["lp_locked_pct"] < sec.min_lp_locked_pct:
             return Verdict(False, f"Liquidität nur {s['lp_locked_pct']:.0f}% gelockt", s)
         if s["top10_pct"] > sec.max_top10_holder_pct:
-            return Verdict(False, f"Top-10-Holder halten {s['top10_pct']:.0f}%", s)
+            return Verdict(False, f"Top-10-Holder halten {s['top10_pct']:.0f}%", s, retry=True)   # kann sich verteilen
         if s["max_holder_pct"] > sec.max_single_holder_pct:
-            return Verdict(False, f"Ein Holder hält {s['max_holder_pct']:.0f}%", s)
+            return Verdict(False, f"Ein Holder hält {s['max_holder_pct']:.0f}%", s, retry=True)
         bad = [r["name"] for r in s["risks"] if str(r["level"]).lower() in sec.reject_risk_levels]
         if bad:
             return Verdict(False, "Risiken: " + ", ".join(bad[:3]), s)

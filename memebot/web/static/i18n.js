@@ -84,6 +84,7 @@ const PATTERNS_EN = [
   [/^Cooldown für diesen Coin$/, "cooldown for this coin"],
   [/^zu wenig Kapital \(verfügbar (.+) SOL\)$/, "not enough capital (available $1 SOL)"],
   [/^zu wenig Kapital(.*)$/, "not enough capital$1"],
+  [/^(.+) – erneute Tiefenprüfung in (\d+) min$/, (m, a, b) => `${tr(a)} – next deep check in ${b} min`],
   // Rug-Analyst
   [/^als rugged markiert$/, "flagged as rugged"],
   [/^Mint-Authority aktiv \(Dev kann nachdrucken\)$/, "mint authority active (dev can mint more)"],

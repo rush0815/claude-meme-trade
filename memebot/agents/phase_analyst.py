@@ -44,9 +44,10 @@ class PhaseAnalyst(Agent):
             return Verdict(False, "keine Kursdaten für den Phasen-Check", retry=True)
         dd = -info["vom_hoch_pct"]
         if dd > max_dd:
-            return Verdict(False, f"{dd:.0f}% unter dem Hoch – Hype vorbei", info)
+            return Verdict(False, f"{dd:.0f}% unter dem Hoch – Hype vorbei", info, retry=True)   # Erholung möglich
         if info["std_seit_hoch"] > max_h and dd > 25:
-            return Verdict(False, f"Hoch vor {info['std_seit_hoch']:.0f} h, {dd:.0f}% darunter – Hype vorbei", info)
+            return Verdict(False, f"Hoch vor {info['std_seit_hoch']:.0f} h, {dd:.0f}% darunter – Hype vorbei", info,
+                           retry=True)
         return Verdict(True, f"Phase ok ({info['vom_hoch_pct']:+.0f}% vom Hoch)", info)
 
     async def check(self, m: Market) -> Verdict:
