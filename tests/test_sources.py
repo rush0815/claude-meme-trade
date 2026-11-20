@@ -83,3 +83,15 @@ def test_geckoterminal_mints_skip_bonding_curve():
     found = asyncio.run(gt.latest_mints())
     mints = {m for m, _ in found}
     assert mints == {"AAApump"} and len(found) == 4      # 4 Abfragen, je 1 Treffer
+
+
+def test_helius_migration_parsing():
+    from memebot.sources.helius_migrations import is_migration, mint_from_tx, ws_url
+
+    assert ws_url("https://mainnet.helius-rpc.com/?api-key=K") == "wss://mainnet.helius-rpc.com/?api-key=K"
+    assert is_migration(["Program 6EF8... invoke [1]", "Program log: Instruction: Migrate"])
+    assert not is_migration(["Program log: Instruction: Buy"])
+    tx = {"meta": {"postTokenBalances": [{"mint": SOL_MINT}, {"mint": "TOKpump"}, {"mint": "TOKpump"},
+                                         {"mint": "LPMINTxyz"}], "preTokenBalances": [{"mint": "TOKpump"}]}}
+    assert mint_from_tx(tx) == "TOKpump"
+    assert mint_from_tx({"meta": {"postTokenBalances": [{"mint": SOL_MINT}]}}) is None

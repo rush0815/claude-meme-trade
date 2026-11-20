@@ -21,7 +21,8 @@ rugcheck_base = "https://api.rugcheck.xyz/v1"
 pumpportal_ws = "wss://pumpportal.fun/api/data"
 
 [scout]
-use_pumpportal = true           # Graduations von pump.fun live mitlesen
+use_pumpportal = true           # Graduations über PumpPortal (Drittanbieter)
+use_helius_migrations = true    # Graduations direkt aus der Blockchain (braucht HELIUS_API_KEY, Free reicht)
 use_dexscreener_lists = true    # neue Profile + Boosts von DexScreener
 use_geckoterminal = true        # neue + trendende Solana-Pools (beste Quelle für graduierte Coins)
 min_age_min = 15                # ganz frische Launches meiden (Sniper/Rugs)
