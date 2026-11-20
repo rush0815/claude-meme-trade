@@ -44,7 +44,7 @@ def test_web_api(tmp_path):
     s = c.get("/api/summary").json()
     assert s["sim"] and s["mode"] == "paper"
     for path in ("/api/positions?state=open", "/api/positions?state=closed", "/api/equity", "/api/events",
-                 "/api/candidates", "/api/analysis", "/api/config"):
+                 "/api/candidates", "/api/analysis", "/api/config", "/api/funnel"):
         assert c.get(path).status_code == 200, path
     assert "api" not in c.get("/api/config").json()       # keine Schlüssel ausliefern
     assert c.post("/api/control/pause").json()["ok"]
@@ -56,3 +56,12 @@ def test_web_auth(tmp_path):
     c = TestClient(create_app(bot))
     assert c.get("/api/summary").status_code == 401
     assert c.get("/api/summary", auth=("admin", "geheim")).status_code == 200
+
+
+def test_funnel_groups_reasons(tmp_path):
+    bot = make_bot(tmp_path)
+    for i, r in enumerate(["Liquidität $3,535 zu gering", "Liquidität $18,977 zu gering", "kein Momentum"]):
+        bot.db.upsert_candidate(f"M{i}", "t")
+        bot.db.set_candidate(f"M{i}", "waiting", r, 40 + i)
+    f = TestClient(create_app(bot)).get("/api/funnel").json()
+    assert f["kandidaten"] == 3 and f["gruende"][0]["anzahl"] == 2 and "Liquidität" in f["gruende"][0]["grund"]

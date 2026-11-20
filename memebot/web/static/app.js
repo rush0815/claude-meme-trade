@@ -241,7 +241,16 @@ function aggTable(obj, first) {
 }
 
 async function loadAnalysis() {
-  const a = await api("/api/analysis");
+  const [a, f] = await Promise.all([api("/api/analysis"), api("/api/funnel")]);
+  $("funnelInfo").textContent = `${f.kandidaten} Coins geprüft. Letzte Entscheidung je Coin, Kaufschwelle Score ${f.min_score}.`;
+  $("funnel").innerHTML = `<tr><th>Grund</th><th class="num">Coins</th><th class="num">Ø Score</th><th class="num">max</th></tr>` +
+    (f.gruende.map((g) => `<tr><td>${esc(g.grund)}</td><td class="num">${g.anzahl}</td>
+      <td class="num">${g.avg_score ?? "–"}</td><td class="num">${g.max_score ?? "–"}</td></tr>`).join("") ||
+      `<tr><td colspan="4" class="muted">keine Daten</td></tr>`);
+  const maxN = Math.max(1, ...Object.values(f.score_verteilung));
+  $("scoreDist").innerHTML = Object.entries(f.score_verteilung).map(([k, n]) =>
+    `<tr><td style="width:60px">${k}</td><td><div class="bar" style="height:10px"><i style="width:${n / maxN * 100}%;${
+      +k.split("–")[0] >= f.min_score ? "background:var(--green)" : ""}"></i></div></td><td class="num" style="width:40px">${n}</td></tr>`).join("");
   $("tips").innerHTML = a.vorschlaege.map((t) => `<li>${esc(t)}</li>`).join("");
   $("byExit").innerHTML = aggTable(a.nach_ausstieg, "Ausstieg");
   $("byScore").innerHTML = aggTable(a.nach_score, "Score");

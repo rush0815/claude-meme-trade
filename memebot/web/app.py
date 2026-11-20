@@ -124,6 +124,32 @@ def create_app(bot: "Bot") -> FastAPI:
                 r["details"] = {}
         return rows
 
+    @app.get("/api/funnel")
+    def funnel(hours: float = 24, _: None = Depends(auth)):
+        """Woran scheitern die Kandidaten? Letzte Entscheidung je Coin, Gründe ohne Zahlen gruppiert."""
+        import re
+        rows = db.q("SELECT status, reason, score FROM candidates WHERE COALESCE(last_checked, first_seen) >= ?",
+                    (time.time() - hours * 3600,))
+        groups: dict[str, dict] = {}
+        for r in rows:
+            key = re.sub(r"[-+]?\$?[\d.,]+\s*(%|h|min|SOL)?", "…", r["reason"] or "?").strip()
+            key = re.sub(r"(…\s*)+", "… ", key).strip()
+            g = groups.setdefault(key, {"grund": key, "anzahl": 0, "scores": []})
+            g["anzahl"] += 1
+            if r["score"] is not None:
+                g["scores"].append(r["score"])
+        out = []
+        for g in groups.values():
+            sc = g.pop("scores")
+            g["avg_score"] = round(sum(sc) / len(sc)) if sc else None
+            g["max_score"] = round(max(sc)) if sc else None
+            out.append(g)
+        out.sort(key=lambda g: -g["anzahl"])
+        scores = [r["score"] for r in rows if r["score"] is not None]
+        buckets = {f"{lo}–{lo + 9}": sum(1 for x in scores if lo <= x < lo + 10) for lo in range(0, 100, 10)}
+        return {"stunden": hours, "kandidaten": len(rows), "gruende": out, "score_verteilung": buckets,
+                "min_score": bot.cfg.strategy.min_score}
+
     @app.get("/api/analysis")
     def analysis(_: None = Depends(auth)):
         return bot.analyst.stats()
