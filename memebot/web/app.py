@@ -46,8 +46,23 @@ def create_app(bot: "Bot") -> FastAPI:
     def mode() -> str:
         return bot.ctx.mode
 
+    def mc(p: dict, price) -> float | None:
+        sol_usd = bot.ctx.sol_usd
+        return price * p["supply"] * sol_usd if p.get("supply") and sol_usd > 0 and price else None
+
+    def spark(p: dict, points: int = 40) -> list:
+        """Kleiner Kursverlauf seit Einstieg (Marktkapitalisierung, sonst Preis)."""
+        rows = db.ticks(p["mint"], p["opened_at"] - 60)
+        if len(rows) > points:
+            step = len(rows) / points
+            rows = [rows[int(i * step)] for i in range(points)] + [rows[-1]]
+        return [[round(r["ts"]), mc(p, r["price"]) or r["price"]] for r in rows]
+
     def enrich(p: dict) -> dict:
         p = dict(p)
+        p["entry_mcap"] = p.get("entry_mcap") or mc(p, p["entry_price"])
+        p["last_mcap"] = mc(p, p.get("last_price"))
+        p["high_mcap"] = mc(p, p.get("high_price"))
         for k in ("score_details", "security"):
             try:
                 p[k] = json.loads(p[k]) if p.get(k) else {}
@@ -60,6 +75,7 @@ def create_app(bot: "Bot") -> FastAPI:
             p["unrealized_sol"] = value + (p["sol_received"] or 0) - p["size_sol"]
             p["unrealized_pct"] = p["unrealized_sol"] / p["size_sol"] * 100 if p["size_sol"] else 0
             p["price"] = bot.price_info(p["mint"])
+            p["spark"] = spark(p)
         return p
 
     def asset_version() -> str:
@@ -152,6 +168,73 @@ def create_app(bot: "Bot") -> FastAPI:
         p = enrich(p)
         p["fills"] = db.q("SELECT * FROM fills WHERE position_id=? ORDER BY ts", (pid,))
         return p
+
+    candle_cache: dict[str, tuple[float, list]] = {}
+
+    @app.get("/api/positions/{pid}/chart")
+    async def position_chart(pid: int, _: None = Depends(auth)):
+        """1-Minuten-Kerzen als Marktkapitalisierung + Ein-/Ausstiege + aktuelle Ausstiegs-Level."""
+        p = db.position(pid)
+        if not p:
+            raise HTTPException(404)
+        p = enrich(p)
+        supply, sol_usd = p.get("supply"), bot.ctx.sol_usd
+        conv_usd = (lambda x: x * supply) if supply else (lambda x: x)            # GeckoTerminal liefert USD/Token
+        conv_sol = (lambda x: x * supply * sol_usd) if supply and sol_usd > 0 else (lambda x: x)
+        end = (p["closed_at"] or time.time()) + (15 * 60 if p["closed_at"] else 0)
+        start = p["opened_at"] - 90 * 60
+        candles: list[dict] = []
+        source = "ticks"
+        gecko = getattr(bot.ctx, "gecko", None)
+        if gecko is not None and p.get("pair_address"):
+            key = f"{p['pair_address']}:{int(end // 60)}" if p["closed_at"] else p["pair_address"]
+            hit = candle_cache.get(key)
+            if hit and time.time() - hit[0] < (3600 if p["closed_at"] else 60):
+                raw = hit[1]
+            else:
+                try:
+                    raw = await gecko.candles(p["pair_address"], minutes=1, limit=300,
+                                              before=end if p["closed_at"] else None)
+                    candle_cache[key] = (time.time(), raw)
+                except Exception:
+                    raw = []
+            candles = [{"time": int(c[0]), "open": conv_usd(c[1]), "high": conv_usd(c[2]), "low": conv_usd(c[3]),
+                        "close": conv_usd(c[4])} for c in raw if start <= c[0] <= end]
+            if candles:
+                source = "geckoterminal"
+        # eigene Kursaufzeichnung ergänzt die Zeit nach der letzten GeckoTerminal-Kerze (Echtzeit)
+        last_t = candles[-1]["time"] if candles else 0
+        buckets: dict[int, dict] = {}
+        for t in db.ticks(p["mint"], max(start, last_t + 60), end):
+            b = int(t["ts"] // 60 * 60)
+            v = conv_sol(t["price"])
+            c = buckets.get(b)
+            if c is None:
+                buckets[b] = {"time": b, "open": v, "high": v, "low": v, "close": v}
+            else:
+                c["high"], c["low"], c["close"] = max(c["high"], v), min(c["low"], v), v
+        candles += [buckets[k] for k in sorted(buckets)]
+        fills = [{"time": int(f["ts"]), "side": f["side"], "reason": f["reason"],
+                  "mcap": f.get("mcap_usd") or conv_sol(f["price"])} for f in db.q(
+                      "SELECT * FROM fills WHERE position_id=? ORDER BY ts", (pid,))]
+        levels = []
+        if p["status"] == "open" and p["entry_mcap"]:
+            e, em = bot.cfg["exit"], p["entry_mcap"]
+            levels.append({"label": "SL", "value": em * (1 - e["stop_loss_pct"] / 100), "kind": "sl"})
+            hi_pct = ((p["high_price"] or p["entry_price"]) / p["entry_price"] - 1) * 100
+            be = float(e.get("breakeven_activate_pct", 0) or 0)
+            if be > 0 and hi_pct >= be:
+                levels.append({"label": "BE", "value": em * (1 + float(e.get("breakeven_floor_pct", 3)) / 100), "kind": "be"})
+            if e.get("mode") == "simple":
+                levels.append({"label": "TP", "value": em * (1 + float(e.get("simple_take_profit_pct", 30)) / 100), "kind": "tp"})
+            else:
+                for i, (lvl, _) in enumerate(e.get("take_profit_levels") or []):
+                    if i >= int(p["tp_hits"] or 0):
+                        levels.append({"label": f"TP{i + 1}", "value": em * (1 + lvl / 100), "kind": "tp"})
+                if hi_pct >= float(e["trailing_activate_pct"]) and p.get("high_mcap"):
+                    levels.append({"label": "Trail", "value": p["high_mcap"] * (1 - e["trailing_stop_pct"] / 100), "kind": "trail"})
+        return {"candles": candles, "fills": fills, "levels": levels, "entry_mcap": p["entry_mcap"],
+                "is_mcap": bool(supply), "source": source, "status": p["status"]}
 
     @app.post("/api/positions/{pid}/close")
     def close_position(pid: int, _: None = Depends(auth)):

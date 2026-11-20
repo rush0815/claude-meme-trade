@@ -83,6 +83,13 @@ CREATE TABLE IF NOT EXISTS equity (
     cash_sol REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS ticks (
+    mint TEXT NOT NULL,
+    ts REAL NOT NULL,
+    price REAL NOT NULL                           -- SOL pro Token
+);
+CREATE INDEX IF NOT EXISTS ix_ticks ON ticks(mint, ts);
+
 CREATE TABLE IF NOT EXISTS ai_calls (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts REAL NOT NULL,
@@ -128,6 +135,12 @@ class DB:
         fcols = {r[1] for r in self.conn.execute("PRAGMA table_info(fills)")}
         if "market_price" not in fcols:
             self.conn.execute("ALTER TABLE fills ADD COLUMN market_price REAL")
+        if "mcap_usd" not in fcols:
+            self.conn.execute("ALTER TABLE fills ADD COLUMN mcap_usd REAL")
+        pcols = {r[1] for r in self.conn.execute("PRAGMA table_info(positions)")}
+        for col in ("supply", "entry_mcap"):
+            if col not in pcols:
+                self.conn.execute(f"ALTER TABLE positions ADD COLUMN {col} REAL")
 
     # ------------------------------------------------------------- basics
     def q(self, sql: str, args: tuple | list = ()) -> list[dict]:
@@ -158,6 +171,7 @@ class DB:
                (time.time(), agent, level, message, mint))
 
     def prune(self, keep_events: int = 20000) -> None:
+        self.x("DELETE FROM ticks WHERE ts < ?", (time.time() - 3 * 86400,))
         self.x("DELETE FROM events WHERE id < (SELECT COALESCE(MAX(id),0) - ? FROM events)", (keep_events,))
         self.x("DELETE FROM candidates WHERE status IN ('rejected','expired') AND first_seen < ?",
                (time.time() - 3 * 86400,))
@@ -182,11 +196,18 @@ class DB:
 
     def add_fill(self, position_id: int, side: str, sol_amount: float, token_amount: float,
                  price: float, reason: str, signature: str | None = None, fee_sol: float = 0.0,
-                 market_price: float | None = None) -> None:
+                 market_price: float | None = None, mcap_usd: float | None = None) -> None:
         self.x("INSERT INTO fills(position_id,ts,side,sol_amount,token_amount,price,reason,signature,fee_sol,"
-               "market_price) VALUES(?,?,?,?,?,?,?,?,?,?)",
+               "market_price,mcap_usd) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                (position_id, time.time(), side, sol_amount, token_amount, price, reason, signature, fee_sol,
-                market_price))
+                market_price, mcap_usd))
+
+    def add_tick(self, mint: str, price: float) -> None:
+        self.x("INSERT INTO ticks(mint,ts,price) VALUES(?,?,?)", (mint, time.time(), price))
+
+    def ticks(self, mint: str, since: float, until: float | None = None) -> list[dict]:
+        return self.q("SELECT ts, price FROM ticks WHERE mint=? AND ts>=? AND ts<=? ORDER BY ts",
+                      (mint, since, until or time.time() + 1))
 
     def realized_pnl_since(self, mode: str, since_ts: float) -> float:
         r = self.one("SELECT COALESCE(SUM(pnl_sol),0) AS s FROM positions WHERE mode=? AND status='closed'"

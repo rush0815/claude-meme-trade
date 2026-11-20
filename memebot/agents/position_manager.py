@@ -20,6 +20,19 @@ class PositionManager(Agent):
         self.pf = portfolio
         self._fail: dict[int, int] = {}
         self._lock = asyncio.Lock()     # DexScreener-Schleife und Live-Kurse nie gleichzeitig verkaufen lassen
+        self._last_tick: dict[str, float] = {}
+
+    def mcap(self, p: dict, price: float) -> float | None:
+        """Marktkapitalisierung in USD zu einem Preis (SOL pro Token)."""
+        if p.get("supply") and self.ctx.sol_usd > 0 and price:
+            return price * p["supply"] * self.ctx.sol_usd
+        return None
+
+    def _record_tick(self, mint: str, price: float) -> None:
+        now = time.time()
+        if now - self._last_tick.get(mint, 0) >= 2:           # max. ein Punkt alle 2 s
+            self._last_tick[mint] = now
+            self.db.add_tick(mint, price)
 
     # ------------------------------------------------------------ Eröffnen
     async def open(self, sig: Signal, size_sol: float) -> int | None:
@@ -29,14 +42,21 @@ class PositionManager(Agent):
         except Exception as e:
             self.log(f"{m.symbol}: Kauf fehlgeschlagen – {e}", "warn", m.mint)
             return None
+        sol_usd = m.price_usd / m.price_sol if m.price_usd > 0 and m.price_sol > 0 else self.ctx.sol_usd
+        if sol_usd > 0:
+            self.ctx.sol_usd = sol_usd
+        supply = m.fdv / m.price_usd if m.fdv > 0 and m.price_usd > 0 else None
+        entry_mcap = fill.price * supply * sol_usd if supply and sol_usd > 0 else None
         pid = self.db.insert_position(
             mode=self.ctx.mode, mint=m.mint, symbol=m.symbol, name=m.name, pair_address=m.pair_address,
             dex=m.dex, status="open", opened_at=time.time(), size_sol=fill.sol_amount,
             tokens_total=fill.token_amount, tokens_remaining=fill.token_amount, entry_price=fill.price,
             entry_liquidity_usd=m.liquidity_usd, last_price=m.price_sol, high_price=fill.price,
-            score=sig.score, score_details=json.dumps(sig.details), security=json.dumps(sig.security))
+            score=sig.score, score_details=json.dumps(sig.details), security=json.dumps(sig.security),
+            supply=supply, entry_mcap=entry_mcap)
         self.db.add_fill(pid, "buy", fill.sol_amount, fill.token_amount, fill.price, "Einstieg",
-                         fill.signature, fill.fee_sol, market_price=m.price_sol)
+                         fill.signature, fill.fee_sol, market_price=m.price_sol, mcap_usd=entry_mcap)
+        self.db.add_tick(m.mint, m.price_sol)
         self.log(f"KAUF {m.symbol}: {fill.sol_amount:.4f} SOL, Score {sig.score:.0f}", mint=m.mint)
         return pid
 
@@ -87,6 +107,7 @@ class PositionManager(Agent):
                 continue
             m = markets.get(p["mint"])
             if m and m.price_sol > 0:
+                self._record_tick(p["mint"], m.price_sol)
                 p["last_price"] = m.price_sol
                 p["high_price"] = max(p["high_price"] or 0, m.price_sol)
                 self.db.update_position(p["id"], last_price=p["last_price"], high_price=p["high_price"])
@@ -110,7 +131,7 @@ class PositionManager(Agent):
             return
         self._fail.pop(p["id"], None)
         self.db.add_fill(p["id"], "sell", fill.sol_amount, fill.token_amount, fill.price, reason,
-                         fill.signature, fill.fee_sol, market_price=price)
+                         fill.signature, fill.fee_sol, market_price=price, mcap_usd=self.mcap(p, fill.price))
         remaining = max(0.0, p["tokens_remaining"] - fill.token_amount)
         received = (p["sol_received"] or 0) + fill.sol_amount
         fields = {"tokens_remaining": remaining, "sol_received": received}

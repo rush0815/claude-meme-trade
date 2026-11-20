@@ -91,3 +91,8 @@ python -m memebot                         # Papiermodus mit echten Daten
 **GitHub Codespaces:** Repo öffnen → *Code → Codespaces → Create*. Die Umgebung installiert alles
 automatisch; `python -m memebot` starten und den weitergeleiteten Port 8080 öffnen.
 Der Simulationsmodus zeigt nur, dass alles funktioniert – über die echte Profitabilität sagt er nichts.
+
+## Drittanbieter
+
+Der Trade-Chart nutzt [TradingView Lightweight Charts™](https://github.com/tradingview/lightweight-charts)
+(Apache-2.0, Datei unter `memebot/web/static/vendor/`, Lizenz in `LICENSE-lightweight-charts`).
