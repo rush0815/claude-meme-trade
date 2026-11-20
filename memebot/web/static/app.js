@@ -16,6 +16,11 @@ const span = (ts) => {
 const ago = (ts) => L("vor " + span(ts), span(ts) + " ago");
 const dt = (ts) => new Date(ts * 1000).toLocaleString(LOCALE(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const dur = (a, b) => { const m = (b - a) / 60; return m < 60 ? Math.round(m) + " min" : (m / 60).toFixed(1) + " h"; };
+const fmtMC = (x) => {
+  if (x == null || !isFinite(x)) return "–";
+  const a = Math.abs(x);
+  return "$" + (a >= 1e9 ? (x / 1e9).toFixed(2) + "B" : a >= 1e6 ? (x / 1e6).toFixed(2) + "M" : a >= 1e3 ? (x / 1e3).toFixed(1) + "k" : x.toFixed(0));
+};
 const statusName = (s) => (STATUS[LANG] || STATUS.de)[s] || s;
 
 async function api(path, opts) {
@@ -39,8 +44,9 @@ document.querySelectorAll("#rangeSeg button").forEach((b) => b.onclick = () => {
   hours = +b.dataset.h; loadEquity(true);
 });
 $("agentFilter").onchange = () => loadAgents();
-$("modalClose").onclick = () => $("modal").classList.add("hidden");
-$("modal").onclick = (e) => { if (e.target.id === "modal") $("modal").classList.add("hidden"); };
+const closeModal = () => { $("modal").classList.add("hidden"); if (tv.chart) { tv.chart.remove(); tv.chart = null; } };
+$("modalClose").onclick = closeModal;
+$("modal").onclick = (e) => { if (e.target.id === "modal") closeModal(); };
 document.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
   const act = b.dataset.act;
   if (act === "kill" && !confirm(L("Wirklich alle Positionen verkaufen und den Bot stoppen?",
@@ -156,15 +162,33 @@ function posRow(p) {
       (p.tp_hits ? L(` · TP ${p.tp_hits} verkauft: ${sol(p.sol_received)} SOL gesichert, Rest ${rest}%`,
                      ` · TP ${p.tp_hits} sold: ${sol(p.sol_received)} SOL secured, ${rest}% left`) : "")
     : `${dt(p.closed_at)} · ${esc(tr(p.exit_reason))} · ${dur(p.opened_at, p.closed_at)} · ${L("Einsatz", "Stake")} ${sol(p.size_sol)}`;
+  const mcLine = p.entry_mcap ? `<span class="mc">MC ${fmtMC(p.entry_mcap)} → ${fmtMC(p.last_mcap)}</span>` : "";
   return `<div class="row" data-id="${p.id}">
-    <div class="sym">${esc(p.symbol || p.mint.slice(0, 6))}</div>
+    <div class="sym">${esc(p.symbol || p.mint.slice(0, 6))} ${mcLine}</div>
     <div class="pnl ${cls(v)}">${sol(v)} SOL</div>
+    ${open && p.spark && p.spark.length > 1 ? `<canvas class="spark" data-spark='${JSON.stringify(p.spark)}' data-entry="${p.entry_mcap || ""}"></canvas>` : ""}
     <div class="meta">${meta}</div>
     <div class="meta pnl ${cls(vp)}">${pct(vp)}</div></div>`;
 }
 
 function bindRows(el) {
   el.querySelectorAll(".row").forEach((r) => r.onclick = () => showPosition(r.dataset.id));
+  el.querySelectorAll("canvas.spark").forEach(drawSpark);
+}
+
+// Mini-Linie seit Einstieg; gestrichelt = Einstieg
+function drawSpark(cv) {
+  const pts = JSON.parse(cv.dataset.spark || "[]"), entry = +cv.dataset.entry || null;
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d"); g.scale(dpr, dpr);
+  const ys = pts.map((p) => p[1]).concat(entry ? [entry] : []);
+  const y0 = Math.min(...ys), y1 = Math.max(...ys), t0 = pts[0][0], t1 = pts[pts.length - 1][0];
+  const X = (t) => 2 + (t - t0) / (t1 - t0 || 1) * (w - 4), Y = (v) => 2 + (1 - (v - y0) / (y1 - y0 || 1)) * (h - 4);
+  if (entry) { g.setLineDash([3, 3]); g.strokeStyle = "#8b949e"; g.beginPath(); g.moveTo(0, Y(entry)); g.lineTo(w, Y(entry)); g.stroke(); g.setLineDash([]); }
+  const last = pts[pts.length - 1][1];
+  g.strokeStyle = !entry || last >= entry ? "#3fb950" : "#f85149"; g.lineWidth = 1.5;
+  g.beginPath(); pts.forEach((p, i) => (i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1])))); g.stroke();
 }
 
 async function loadOpen() {
@@ -202,6 +226,73 @@ function scoreBlock(sd) {
     </div>`;
 }
 
+// ---------------------------------------------------------------- Trade-Chart (TradingView Lightweight Charts)
+const tv = { chart: null, series: null, pid: null, last: null, isMcap: true };
+const TZ = -new Date().getTimezoneOffset() * 60;            // Chart zeigt Ortszeit
+const LEVEL_COLOR = { sl: "#f85149", be: "#d29922", tp: "#3fb950", trail: "#7c8cff" };
+
+async function renderTradeChart(p) {
+  const el = $("tvChart");
+  if (!el || !window.LightweightCharts) return;
+  let d;
+  try { d = await api(`/api/positions/${p.id}/chart`); } catch (e) { el.innerHTML = `<p class="muted">${L("Chart nicht verfügbar", "Chart unavailable")}</p>`; return; }
+  if (!d.candles.length) { el.innerHTML = `<p class="muted">${L("Noch keine Kursdaten für den Chart.", "No price data for the chart yet.")}</p>`; return; }
+  const LW = window.LightweightCharts;
+  const chart = LW.createChart(el, {
+    autoSize: true,
+    layout: { background: { color: "transparent" }, textColor: "#8b949e", fontSize: 11 },
+    grid: { vertLines: { color: "#1d232b" }, horzLines: { color: "#1d232b" } },
+    rightPriceScale: { borderColor: "#262d36" },
+    timeScale: { borderColor: "#262d36", timeVisible: true, secondsVisible: false },
+    localization: { priceFormatter: d.is_mcap ? fmtMC : (x) => x.toExponential(2) },
+    crosshair: { mode: 0 },
+  });
+  const series = chart.addSeries(LW.CandlestickSeries, {
+    upColor: "#3fb950", downColor: "#f85149", borderVisible: false, wickUpColor: "#3fb950", wickDownColor: "#f85149",
+    priceFormat: { type: "custom", formatter: d.is_mcap ? fmtMC : (x) => x.toExponential(2), minMove: 1e-12 },
+  });
+  series.setData(d.candles.map((c) => ({ ...c, time: c.time + TZ })));
+  const legend = [];
+  if (d.entry_mcap) {
+    series.createPriceLine({ price: d.entry_mcap, color: "#c9d1d9", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: L("Einstieg", "Entry") });
+    legend.push(`<span><i style="border-color:#c9d1d9"></i>${L("Einstieg", "Entry")} ${fmtMC(d.entry_mcap)}</span>`);
+  }
+  for (const lv of d.levels) {
+    series.createPriceLine({ price: lv.value, color: LEVEL_COLOR[lv.kind], lineWidth: 1, lineStyle: 1, axisLabelVisible: true, title: lv.label });
+    legend.push(`<span><i style="border-color:${LEVEL_COLOR[lv.kind]}"></i>${esc(lv.label)} ${fmtMC(lv.value)}</span>`);
+  }
+  for (const f of d.fills.filter((f) => f.side === "sell")) {
+    series.createPriceLine({ price: f.mcap, color: "#e3b341", lineWidth: 1, lineStyle: 0, axisLabelVisible: false, title: tr(f.reason) });
+  }
+  const markers = d.fills.map((f) => ({
+    time: Math.floor(f.time / 60) * 60 + TZ, position: f.side === "buy" ? "belowBar" : "aboveBar",
+    color: f.side === "buy" ? "#7c8cff" : "#e3b341", shape: f.side === "buy" ? "arrowUp" : "arrowDown",
+    text: f.side === "buy" ? L("Kauf", "Buy") : tr(f.reason),
+  }));
+  if (markers.length) LW.createSeriesMarkers(series, markers);
+  legend.push(`<span>${L("Quelle", "Source")}: ${d.source === "geckoterminal" ? "GeckoTerminal + live" : L("eigene Kursaufzeichnung", "own price recording")}</span>`);
+  $("tvLegend").innerHTML = legend.join("");
+  chart.timeScale().fitContent();
+  Object.assign(tv, { chart, series, pid: p.id, last: { ...d.candles[d.candles.length - 1], time: d.candles[d.candles.length - 1].time + TZ },
+    isMcap: d.is_mcap, open: d.status === "open" });
+}
+
+// Echtzeit: letzten Kurs aus dem Live-Push in die laufende Minute einarbeiten
+function updateTradeChart(openRows) {
+  if (!tv.chart || !tv.open) return;
+  const p = openRows.find((x) => x.id === tv.pid);
+  if (!p) return;
+  const v = tv.isMcap ? p.last_mcap : p.last_price;
+  if (!v) return;
+  const t = Math.floor(Date.now() / 60000) * 60 + TZ;
+  if (tv.last && tv.last.time === t) {
+    tv.last = { ...tv.last, high: Math.max(tv.last.high, v), low: Math.min(tv.last.low, v), close: v };
+  } else if (!tv.last || t > tv.last.time) {
+    tv.last = { time: t, open: tv.last ? tv.last.close : v, high: v, low: v, close: v };
+  }
+  tv.series.update(tv.last);
+}
+
 function aiBlock(sd) {
   if (sd.ki_score == null) return "";
   const flags = (sd.ki_red_flags || []).map((f) => `<li>${esc(f)}</li>`).join("");
@@ -225,20 +316,23 @@ async function showPosition(id) {
     const tx = f.signature && f.signature !== "paper" ? ` · <a href="https://solscan.io/tx/${esc(f.signature)}" target="_blank">Tx</a>` : "";
     return `<tr><td>${tm(f.ts)}<br><span class="muted">${buy ? L("Kauf", "Buy") : esc(tr(f.reason))}${tx}</span></td>
     <td class="num">${sol(f.sol_amount)}</td>
-    <td class="num">${fmtP(f.price)}<br><span class="muted">${L("Markt", "Market")} ${fmtP(f.market_price)}</span></td>
+    <td class="num">${f.mcap_usd ? fmtMC(f.mcap_usd) : fmtP(f.price)}<br><span class="muted">${f.mcap_usd ? fmtP(f.price) + " SOL" : L("Markt ", "Market ") + fmtP(f.market_price)}</span></td>
     <td class="num"><span class="${buy ? "" : cls(f.price / entry - 1)}">${buy ? L("Einstieg", "Entry") : vsEntry(f.price)}</span><br>
       <span class="muted">${buy ? "" : L("Ausl. ", "Trig. ") + vsEntry(f.market_price)}</span></td></tr>`;
   }).join("");
   const authority = (x) => (x ? L("aktiv", "active") : L("entzogen", "revoked"));
   $("modalContent").innerHTML = `
     <h2>${esc(p.symbol)} <span class="muted">${esc(p.name)}</span></h2>
+    <div id="tvChart"></div><div class="legend" id="tvLegend"></div>
     <div class="kv">
       <div>Status</div><div>${open ? L("offen", "open") : L("geschlossen – ", "closed – ") + esc(tr(p.exit_reason))}</div>
       <div>${L("Ergebnis", "Result")}</div><div class="${cls(open ? p.unrealized_sol : p.pnl_sol)}">${sol(open ? p.unrealized_sol : p.pnl_sol)} SOL (${pct(open ? p.unrealized_pct : p.pnl_pct)})</div>
       <div>${L("Einsatz", "Stake")}</div><div>${sol(p.size_sol)} SOL</div>
       <div>${L("Zurück erhalten", "Received back")}</div><div>${sol(p.sol_received)} SOL${open && p.tp_hits ? L(" (aus Teilverkäufen)", " (from partial sells)") : ""}</div>
       ${open ? `<div>${L("Noch gehalten", "Still held")}</div><div>${Math.round(p.tokens_remaining / p.tokens_total * 100)}% ${L("der Token, Wert", "of tokens, value")} ${sol(p.value_sol)} SOL</div>` : ""}
-      <div>${L("Einstieg / Hoch / Letzter", "Entry / high / last")}</div><div>${(+p.entry_price).toExponential(3)} / ${(+p.high_price).toExponential(3)} / ${(+p.last_price).toExponential(3)}</div>
+      <div>${L("Marktkap. Einstieg / Hoch / Letzter", "Market cap entry / high / last")}</div><div>${p.entry_mcap
+        ? `${fmtMC(p.entry_mcap)} / ${fmtMC(p.high_mcap)} / ${fmtMC(p.last_mcap)}`
+        : `${(+p.entry_price).toExponential(3)} / ${(+p.high_price).toExponential(3)} / ${(+p.last_price).toExponential(3)} SOL`}</div>
       <div>${L("Eröffnet", "Opened")}</div><div>${dt(p.opened_at)}${p.closed_at ? L(" · Dauer ", " · duration ") + dur(p.opened_at, p.closed_at) : ""}</div>
       <div>Score</div><div>${Math.round(p.score)}</div>
       <div>Mint</div><div style="word-break:break-all">${esc(p.mint)}</div>
@@ -256,14 +350,15 @@ async function showPosition(id) {
       <div>Mint/Freeze</div><div>${authority(sec.mint_authority)} / ${authority(sec.freeze_authority)}</div>
     </div>
     <h2>${L("Ausführungen", "Executions")}</h2>
-    <p class="hint">${L(`Preise in SOL pro Token. „Markt“ = Kurs, bei dem der Bot entschieden hat; darüber der tatsächlich erzielte Preis
-      (inkl. Preiseinfluss, Gebühren, Sicherheitsabschlag). „Ausl.“ (Auslöser) = Abstand des Marktkurses zum Einstieg in dem Moment.`,
-      `Prices in SOL per token. "Market" = price at which the bot decided; above it the price actually achieved
-      (incl. price impact, fees, safety discount). "Trig." (trigger) = distance of the market price from the entry at that moment.`)}</p>
+    <p class="hint">${L(`Marktkapitalisierung zum tatsächlich erzielten Preis (inkl. Preiseinfluss, Gebühren, Sicherheitsabschlag), darunter der Preis in SOL pro Token.
+      „Ausl.“ (Auslöser) = Abstand des Marktkurses zum Einstieg im Moment der Entscheidung.`,
+      `Market cap at the price actually achieved (incl. price impact, fees, safety discount), below it the price in SOL per token.
+      "Trig." (trigger) = distance of the market price from the entry at the moment of the decision.`)}</p>
     <div class="scroll"><table class="fills"><tr><th>${L("Zeit / Grund", "Time / reason")}</th><th class="num">SOL</th>
-      <th class="num">${L("Preis", "Price")}</th><th class="num">± Entry</th></tr>${fills}</table></div>
+      <th class="num">${L("Marktkap.", "Mkt cap")}</th><th class="num">± Entry</th></tr>${fills}</table></div>
     ${open ? `<p><button class="btn small danger" id="closeBtn">${L("Position jetzt verkaufen", "Sell position now")}</button></p>` : ""}`;
   $("modal").classList.remove("hidden");
+  renderTradeChart(p);
   if (open) $("closeBtn").onclick = async () => {
     if (!confirm(L("Position verkaufen?", "Sell position?"))) return;
     await api(`/api/positions/${p.id}/close`, { method: "POST" });
@@ -519,8 +614,8 @@ async function connectWs() {
     ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws?token=" + token);
     ws.onopen = () => { wsLive = true; };
     ws.onmessage = (ev) => {
-      if (!$("modal").classList.contains("hidden")) return;
       const d = JSON.parse(ev.data);
+      if (!$("modal").classList.contains("hidden")) { updateTradeChart(d.open); return; }
       renderSummary(d.summary);
       if (tab === "overview") { renderOpen(d.open); loadEquity(); }
     };
@@ -534,7 +629,11 @@ refresh();
 let tick = 0;
 setInterval(() => {
   tick++;
-  if (document.hidden || !$("modal").classList.contains("hidden")) return;
+  if (document.hidden) return;
+  if (!$("modal").classList.contains("hidden")) {               // Chart ohne Live-Verbindung alle 2 s nachführen
+    if (tv.chart && tv.open && !wsLive) api("/api/positions?state=open").then(updateTradeChart).catch(() => {});
+    return;
+  }
   if ((tab === "overview" && !wsLive) || tick % 5 === 0) refresh();
 }, 2000);
 window.addEventListener("resize", () => tab === "overview" && loadEquity());

@@ -20,6 +20,7 @@ class Ctx:
     jup: Any = None          # Jupiter
     rpc: Any = None          # SolanaRPC
     gecko: Any = None        # GeckoTerminal
+    sol_usd: float = 0.0     # aktueller SOL-Kurs in USD (aus DexScreener abgeleitet)
 
     @property
     def mode(self) -> str:

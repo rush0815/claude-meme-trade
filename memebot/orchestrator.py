@@ -161,6 +161,9 @@ class Bot:
             return
         markets = await self.ctx.dex.markets([p["mint"] for p in open_pos])
         self._last_markets.update(markets)
+        rates = [m.price_usd / m.price_sol for m in markets.values() if m.price_usd > 0 and m.price_sol > 0]
+        if rates:
+            self.ctx.sol_usd = sorted(rates)[len(rates) // 2]          # Median: SOL-Kurs in USD
         now = time.time()
         for mint, m in list(markets.items()):
             lv = self.live.get(mint)

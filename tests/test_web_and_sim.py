@@ -113,3 +113,28 @@ def test_timing_migration_and_ui_edit(tmp_path):
     assert bot.cfg["poll_seconds"] == 8 and bot.cfg["scout"]["recheck_seconds"] == 20
     bot2 = make_bot(tmp_path)                      # Migration läuft nicht erneut, eigene Werte bleiben
     assert bot2.cfg["poll_seconds"] == 8
+
+
+def test_mcap_spark_and_chart(tmp_path):
+    bot = make_bot(tmp_path)
+    bot.cfg["scout"]["recheck_seconds"] = 0
+
+    async def go():
+        for _ in range(150):
+            bot.ctx.dex._last = 0
+            await bot.cycle()
+            await bot.position_tick()
+            if bot.db.one("SELECT COUNT(*) AS n FROM positions")["n"]:
+                break
+    asyncio.run(go())
+    p = bot.db.one("SELECT * FROM positions ORDER BY id LIMIT 1")
+    assert p and p["supply"] and abs(p["supply"] - 1e9) / 1e9 < 1e-6     # Simulation: 1 Mrd. Token
+    assert p["entry_mcap"] > 0 and bot.ctx.sol_usd == 150
+    c = TestClient(create_app(bot))
+    row = c.get(f"/api/positions/{p['id']}").json()
+    assert row["entry_mcap"] and row["last_mcap"] and row["fills"][0]["mcap_usd"]
+    if p["status"] == "open":
+        assert len(row.get("spark") or []) >= 1
+    ch = c.get(f"/api/positions/{p['id']}/chart").json()
+    assert ch["is_mcap"] and ch["candles"] and ch["fills"][0]["side"] == "buy"
+    assert all(k in ch["candles"][0] for k in ("time", "open", "high", "low", "close"))
