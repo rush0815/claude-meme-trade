@@ -8,8 +8,14 @@ from __future__ import annotations
 from typing import Any
 
 # Schlüssel -> (Typ, min, max, Beschreibung)
+CHOICES: dict[str, tuple[dict[str, str], str]] = {
+    "exit.mode": ({"ladder": "Leiter (Break-even, 2 TPs, Trailing)", "simple": "Einfach (ein TP + SL)"},
+                  "Ausstiegs-Modus"),
+}
+
 EDITABLE: dict[str, tuple[type, float, float, str]] = {
     "exit.stop_loss_pct": (float, 3, 90, "Stop-Loss in %"),
+    "exit.simple_take_profit_pct": (float, 1, 1000, "Einfach-Modus: Take-Profit in % (alles verkaufen)"),
     "exit.breakeven_activate_pct": (float, 0, 1000, "Break-even-Stop aktiv ab Gewinn in % (0 = aus)"),
     "exit.breakeven_floor_pct": (float, -10, 100, "Break-even-Stop: verkaufen bei Gewinn in %"),
     "exit.tp1_pct": (float, 5, 1000, "Take-Profit 1: Gewinn in %"),
@@ -30,6 +36,8 @@ def current(cfg) -> dict[str, Any]:
     lv = e.get("take_profit_levels") or []
     tp = lambda i, j, d: lv[i][j] if len(lv) > i else d  # noqa: E731
     return {
+        "exit.mode": e.get("mode", "ladder"),
+        "exit.simple_take_profit_pct": e.get("simple_take_profit_pct", 30),
         "exit.stop_loss_pct": e["stop_loss_pct"],
         "exit.breakeven_activate_pct": e.get("breakeven_activate_pct", 0),
         "exit.breakeven_floor_pct": e.get("breakeven_floor_pct", 3),
@@ -47,6 +55,12 @@ def current(cfg) -> dict[str, Any]:
 def validate(values: dict[str, Any]) -> dict[str, Any]:
     out = {}
     for k, v in values.items():
+        if k in CHOICES:
+            opts, label = CHOICES[k]
+            if v not in opts:
+                raise ValueError(f"{label}: erlaubt {', '.join(opts)}")
+            out[k] = v
+            continue
         if k not in EDITABLE:
             raise ValueError(f"unbekannte Einstellung: {k}")
         typ, lo, hi, label = EDITABLE[k]

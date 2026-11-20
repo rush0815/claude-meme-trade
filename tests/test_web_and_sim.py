@@ -95,3 +95,11 @@ def test_exit_v2_migration_overrides_old_config(tmp_path):
     e = bot2.cfg["exit"]
     assert e["take_profit_levels"] == [[30.0, 0.33], [80.0, 0.33]] and e["trailing_activate_pct"] == 50
     assert e["max_hold_min"] == 120 and e["breakeven_activate_pct"] == 25
+
+
+def test_settings_mode_choice(tmp_path):
+    bot = make_bot(tmp_path)
+    c = TestClient(create_app(bot))
+    assert c.post("/api/settings", json={"exit.mode": "simple", "exit.simple_take_profit_pct": 35}).status_code == 200
+    assert bot.cfg["exit"]["mode"] == "simple" and bot.cfg["exit"]["simple_take_profit_pct"] == 35
+    assert c.post("/api/settings", json={"exit.mode": "quatsch"}).status_code == 400
