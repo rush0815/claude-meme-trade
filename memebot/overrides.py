@@ -16,8 +16,8 @@ CHOICES: dict[str, tuple[dict[str, str], str]] = {
 EDITABLE: dict[str, tuple[type, float, float, str]] = {
     "exit.stop_loss_pct": (float, 3, 90, "Stop-Loss in %"),
     "exit.simple_take_profit_pct": (float, 1, 1000, "Einfach-Modus: Take-Profit in % (alles verkaufen)"),
-    "exit.breakeven_activate_pct": (float, 0, 1000, "Break-even-Stop aktiv ab Gewinn in % (0 = aus)"),
-    "exit.breakeven_floor_pct": (float, -10, 100, "Break-even-Stop: verkaufen bei Gewinn in %"),
+    "exit.breakeven_activate_pct": (float, 0, 1000, "SL über Entry ziehen, sobald Gewinn erreicht in % (0 = aus)"),
+    "exit.breakeven_floor_pct": (float, -10, 100, "Neuer SL: Prozent über Entry"),
     "exit.tp1_pct": (float, 5, 1000, "Take-Profit 1: Gewinn in %"),
     "exit.tp1_fraction": (float, 0, 1, "Take-Profit 1: Anteil verkaufen (0–1)"),
     "exit.tp2_pct": (float, 5, 5000, "Take-Profit 2: Gewinn in %"),

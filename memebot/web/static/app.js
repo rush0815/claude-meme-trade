@@ -280,7 +280,7 @@ async function loadControl() {
   const modeSel = $("s_exit.mode");
   const syncMode = () => document.querySelectorAll("#settingsForm input").forEach((i) => {
     const k = i.dataset.key, simple = modeSel.value === "simple";
-    const ladderOnly = /tp[12]_|trailing|breakeven/.test(k), simpleOnly = k.includes("simple_");
+    const ladderOnly = /tp[12]_|trailing/.test(k), simpleOnly = k.includes("simple_");
     const hide = (simple && ladderOnly) || (!simple && simpleOnly);
     i.style.display = i.previousElementSibling.style.display = hide ? "none" : "";
   });
