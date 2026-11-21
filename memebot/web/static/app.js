@@ -384,19 +384,48 @@ async function showPosition(id) {
 
 // ---------------------------------------------------------------- Agenten
 let candCache = [];
-async function loadAgents() {
-  const [cands, evs] = await Promise.all([
-    api("/api/candidates?limit=80"),
-    api("/api/events?limit=200" + ($("agentFilter").value ? "&agent=" + encodeURIComponent($("agentFilter").value) : "")),
-  ]);
-  candCache = cands;
-  $("candTable").innerHTML = `<tr><th>Token</th><th>Status</th><th class="num">Score</th><th>${L("Grund", "Reason")}</th>
-    <th>${L("Quelle", "Source")}</th><th>${L("geprüft", "checked")}</th></tr>` +
-    cands.map((c, i) => `<tr class="click" data-i="${i}"><td>${esc(c.symbol || c.mint.slice(0, 6))}${c.deep ? " 🔍" : ""}</td>
+let candSort = { key: "score", dir: -1 };                 // Standard: höchster Score oben
+
+function sortCands(rows) {
+  const { key, dir } = candSort;
+  const val = (c) => key === "score" ? c.score : key === "reason" ? tr(c.reason || "") : key === "source" ? c.source || ""
+    : key === "token" ? (c.symbol || c.mint) : key === "status" ? statusName(c.status) : c.last_checked || 0;
+  return [...rows].sort((a, b) => {
+    const x = val(a), y = val(b);
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;                               // ohne Score immer unten
+    if (y == null) return -1;
+    const r = typeof x === "number" ? x - y : String(x).localeCompare(String(y), LOCALE());
+    return r * dir || (b.score ?? -1) - (a.score ?? -1);   // bei Gleichstand nach Score
+  });
+}
+
+function renderCandTable() {
+  const rows = sortCands(candCache);
+  const th = (key, label, extra = "") => {
+    const on = candSort.key === key;
+    return `<th class="sortable ${extra}" data-sort="${key}">${label}${on ? (candSort.dir < 0 ? " ▼" : " ▲") : ""}</th>`;
+  };
+  $("candTable").innerHTML = `<tr>${th("token", "Token")}${th("status", "Status")}${th("score", "Score", "num")}${th("reason", L("Grund", "Reason"))}
+    ${th("source", L("Quelle", "Source"))}${th("checked", L("geprüft", "checked"))}</tr>` +
+    rows.map((c) => `<tr class="click" data-mint="${esc(c.mint)}"><td>${esc(c.symbol || c.mint.slice(0, 6))}${c.deep ? " 🔍" : ""}</td>
       <td><span class="tag ${esc(c.status)}">${esc(statusName(c.status))}</span></td>
       <td class="num">${c.score != null ? Math.round(c.score) : "–"}</td><td>${esc(tr(c.reason))}</td><td>${esc(c.source)}</td>
       <td>${c.last_checked ? ago(c.last_checked) : "–"}</td></tr>`).join("");
-  $("candTable").querySelectorAll("tr.click").forEach((r) => r.onclick = () => showCandidateByMint(candCache[+r.dataset.i].mint));
+  $("candTable").querySelectorAll("th[data-sort]").forEach((h) => h.onclick = () => {
+    const k = h.dataset.sort;
+    candSort = candSort.key === k ? { key: k, dir: -candSort.dir } : { key: k, dir: k === "score" || k === "checked" ? -1 : 1 };
+    renderCandTable();
+  });
+  $("candTable").querySelectorAll("tr[data-mint]").forEach((r) => r.onclick = () => showCandidateByMint(r.dataset.mint));
+}
+async function loadAgents() {
+  const [cands, evs] = await Promise.all([
+    api("/api/candidates?limit=300"),
+    api("/api/events?limit=200" + ($("agentFilter").value ? "&agent=" + encodeURIComponent($("agentFilter").value) : "")),
+  ]);
+  candCache = cands;
+  renderCandTable();
   $("eventLog").innerHTML = evs.map((e) => `<div class="${esc(e.level)}${e.mint ? " click" : ""}" ${e.mint ? `data-mint="${esc(e.mint)}"` : ""}><span class="t">${dt(e.ts)}</span>
     <span class="a">${esc(agentName(e.agent))}</span> ${esc(tr(e.message))}</div>`).join("")
     || `<div class="empty">${L("Noch keine Einträge.", "No entries yet.")}</div>`;
