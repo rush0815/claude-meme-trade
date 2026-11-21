@@ -446,16 +446,12 @@ function deepBlock(dp) {
       : `<div class="muted">⏸ ${label}</div><div class="muted">${L("nicht erreicht – vorherige Prüfung hat abgelehnt", "not reached – an earlier check rejected")}</div>`;
   }).join("");
   return `<h2>${L("Letzte Tiefenprüfung", "Last deep check")} <span class="muted">(${ago(dp.ts)})</span></h2>
-    <p class="hint">${L(`Ab hier lief der Coin durch Sicherheits-, Phasen- und KI-Prüfung. Die Werte zeigen den Stand <b>in diesem Moment</b> –
-      die Bewertung weiter unten ist der aktuelle Stand und kann inzwischen ganz anders aussehen.`,
-      `From here the coin went through the security, phase and AI checks. These values show the state <b>at that moment</b> –
-      the rating further down is the current state and may look very different by now.`)}</p>
+    <p class="hint">${L(`Score ${Math.round(dp.score)} zum Zeitpunkt der Tiefenprüfung. Die Bewertung unten zeigt die letzte Prüfung.`,
+      `Score ${Math.round(dp.score)} at the time of the deep check. The rating below shows the latest check.`)}</p>
     <div class="kv">${steps}
       <div>${L("Ergebnis", "Outcome")}</div><div><b>${esc(statusName(dp.status))}</b> – ${esc(tr(dp.reason))}</div>
       <div>${L("Marktkap. / Liquidität", "Market cap / liquidity")}</div><div>${fmtMC(dp.mcap)} / ${fmtMC(dp.liq_usd)}</div>
     </div>
-    <h3>${L("Bewertung damals", "Rating at that time")} (Score ${Math.round(dp.score)})</h3>
-    ${scoreBlock(dp.details || {})}
     ${aiBlock(dp.details || {}, true)}`;
 }
 
@@ -481,7 +477,7 @@ function showCandidate(c) {
     ${c.position_id ? `<p><button class="btn small" id="openTrade">${L("Trade dazu öffnen", "Open related trade")}</button></p>` : ""}
     ${deepBlock(c.deep)}
     ${calls ? `<h3>${L("KI-Aufrufe zu diesem Coin", "AI calls for this coin")}</h3><div class="kv">${calls}</div>` : ""}
-    <h2>${L("Bewertung jetzt (Stratege)", "Current rating (strategist)")}</h2>
+    <h2>${L("Bewertung (Stratege)", "Rating (strategist)")} <span class="muted">· ${L("letzte Prüfung", "last check")} ${c.last_checked ? ago(c.last_checked) : "–"}</span></h2>
     ${Object.keys(sd).length ? scoreBlock(sd) : `<p class="muted">${L("Noch keine Marktdaten.", "No market data yet.")}</p>`}
     ${c.deep ? "" : aiBlock(sd, true)}`;
   $("modal").classList.remove("hidden");
