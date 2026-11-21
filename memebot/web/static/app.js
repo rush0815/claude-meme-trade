@@ -437,8 +437,14 @@ const STEP_EN = { "Stratege": "Strategist", "Rug-Analyst": "Rug analyst", "Phase
 
 function deepBlock(dp) {
   if (!dp) return "";
-  const steps = (dp.steps || []).map((st) => `<div>${st.ok ? "✅" : "❌"} ${esc(LANG === "en" ? (STEP_EN[st.name] || st.name) : st.name)}</div>
-    <div>${esc(tr(st.reason || ""))}</div>`).join("");
+  const ORDER = ["Stratege", "Rug-Analyst", "Phasen-Analyst", "KI-Analyst", "Risk-Manager", "Verkaufstest"];
+  const done = Object.fromEntries((dp.steps || []).map((st) => [st.name, st]));
+  const steps = ORDER.map((name) => {
+    const st = done[name];
+    const label = esc(LANG === "en" ? (STEP_EN[name] || name) : name);
+    return st ? `<div>${st.ok ? "✅" : "❌"} ${label}</div><div>${esc(tr(st.reason || ""))}</div>`
+      : `<div class="muted">⏸ ${label}</div><div class="muted">${L("nicht erreicht – vorherige Prüfung hat abgelehnt", "not reached – an earlier check rejected")}</div>`;
+  }).join("");
   return `<h2>${L("Letzte Tiefenprüfung", "Last deep check")} <span class="muted">(${ago(dp.ts)})</span></h2>
     <p class="hint">${L(`Ab hier lief der Coin durch Sicherheits-, Phasen- und KI-Prüfung. Die Werte zeigen den Stand <b>in diesem Moment</b> –
       die Bewertung weiter unten ist der aktuelle Stand und kann inzwischen ganz anders aussehen.`,
