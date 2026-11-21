@@ -437,7 +437,7 @@ const STEP_EN = { "Stratege": "Strategist", "Rug-Analyst": "Rug analyst", "Phase
 
 function deepBlock(dp) {
   if (!dp) return "";
-  const ORDER = ["Stratege", "Rug-Analyst", "Phasen-Analyst", "KI-Analyst", "Risk-Manager", "Verkaufstest"];
+  const ORDER = ["Stratege", "Rug-Analyst", "Phasen-Analyst", "Risk-Manager", "Verkaufstest", "KI-Analyst"];
   const done = Object.fromEntries((dp.steps || []).map((st) => [st.name, st]));
   const steps = ORDER.map((name) => {
     const st = done[name];
@@ -583,9 +583,9 @@ function renderAISettings(d) {
     : L("Noch kein Key gespeichert.", "No key stored yet.");
   $("aiSettings").innerHTML = `
     <p class="hint">${L(`Optionaler Zusatz-Agent: Claude bewertet Name, Story, Socials, Website und Warnsignale eines Coins –
-      nur für Coins, die alle anderen Prüfungen bestanden haben. Fällt die KI aus, entscheidet der Bot ohne sie.`,
+      nur für Coins, die alle anderen Prüfungen (Sicherheit, Phase, Risiko, Verkaufstest) bestanden haben. Fällt die KI aus, entscheidet der Bot ohne sie.`,
       `Optional extra agent: Claude rates a coin's name, story, socials, website and red flags – only for coins that passed
-      every other check. If the AI fails, the bot decides without it.`)}</p>
+      every other check (security, phase, risk, sell test). If the AI fails, the bot decides without it.`)}</p>
     <label class="switch"><input type="checkbox" id="aiEnabled" ${s.enabled ? "checked" : ""}> ${L("KI-Analyst eingeschaltet", "AI analyst enabled")}</label>
     <div class="form">
       <label>${L("Modus", "Mode")}</label><span></span>

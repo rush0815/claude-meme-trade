@@ -121,17 +121,6 @@ class Bot:
                 self._deep_wait[mint] = (time.time() + self.DEEP_RETRY_S, ph.reason)
             mark("waiting" if ph.retry else "rejected", ph.reason)
             return
-        ai = await self.ai.check(m, sec.details)          # optional, siehe Reiter "KI-Analyst"
-        step("KI-Analyst", ai.ok, ai.reason if not ai.details else f"KI-Score {ai.details.get('ki_score')}"
-             + ("" if ai.ok else f" – {ai.reason}"))
-        if not ai.details:
-            details["ki_hinweis"] = ai.reason                 # warum es keine KI-Bewertung gibt
-        if ai.details:
-            details.update({k: v for k, v in ai.details.items() if k in ("ki_score", "ki_urteil_de", "ki_urteil_en",
-                                                                        "ki_red_flags", "ki_modus")})
-        if not ai.ok:
-            mark("rejected", ai.reason)
-            return
         appr = await self.risk.approve(m, score)
         step("Risk-Manager", appr.ok, appr.reason)
         if not appr.ok:
@@ -144,6 +133,18 @@ class Bot:
         if not st.ok:
             mark("waiting" if st.retry else "rejected", st.reason)
             self.rug.log(f"{m.symbol}: {st.reason}", mint=mint)
+            return
+        # KI zuletzt: kostet Geld, darum erst wenn Sicherheit, Phase, Risiko und Verkaufstest bestanden sind
+        ai = await self.ai.check(m, sec.details)          # optional, siehe Reiter "KI-Analyst"
+        step("KI-Analyst", ai.ok, ai.reason if not ai.details else f"KI-Score {ai.details.get('ki_score')}"
+             + ("" if ai.ok else f" – {ai.reason}"))
+        if not ai.details:
+            details["ki_hinweis"] = ai.reason                 # warum es keine KI-Bewertung gibt
+        if ai.details:
+            details.update({k: v for k, v in ai.details.items() if k in ("ki_score", "ki_urteil_de", "ki_urteil_en",
+                                                                        "ki_red_flags", "ki_modus")})
+        if not ai.ok:
+            mark("rejected", ai.reason)
             return
         self.strategist.log(f"{m.symbol}: Signal Score {score:.0f}", mint=mint)
         pid = await self.positions.open(Signal(m, score, details, sec.details), size)
