@@ -58,6 +58,8 @@ def test_observe_mode_records_usage_and_never_blocks():
     assert abs(row["cost_usd"] - cost("claude-haiku-5-5", 4000, 400, 1)) < 1e-12
     assert abs(row["cost_usd"] - (0.0004 + 0.0002 + 0.01)) < 1e-9
     # Standard-Prüfungen: Website an -> web_fetch, Trend aus -> keine Websuche
+    assert calls[0]["temperature"] == 0
+    assert "60–79" in calls[0]["system"] and "caps the overall score at 29" in calls[0]["system"]
     tools = [t["name"] for t in calls[0].get("tools", [])]
     assert tools == ["web_fetch"] and calls[0]["model"] == "claude-haiku-5-5"
 
@@ -107,6 +109,7 @@ def test_ai_web_api(tmp_path):
     assert "api_key" not in d["settings"] and d["settings"]["api_key_masked"].endswith("mnop")
     assert "abcdefghij" not in json.dumps(d)                 # Key wird nie ausgeliefert
     assert set(d["usage"]) >= {"today", "week", "total", "daily", "recent"}
+    assert [r["from"] for r in d["rubric"]] == [0, 30, 60, 80]
     assert c.post("/api/ai", json={"api_key": "falsch"}).status_code == 400
 
 

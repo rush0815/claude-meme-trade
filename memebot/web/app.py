@@ -383,7 +383,7 @@ def create_app(bot: "Bot") -> FastAPI:
     # ------------------------------------------------------------ KI-Analyst
     @app.get("/api/ai")
     def ai_get(_: None = Depends(auth)):
-        from ..agents.ai_analyst import CHECKS, MODELS, mask, settings
+        from ..agents.ai_analyst import CHECKS, MODELS, RUBRIC, mask, settings
         cfg = settings(db)
         from_env = bool(cfg["api_key"]) and not (db.get("ai") or {}).get("api_key")
         return {
@@ -391,6 +391,7 @@ def create_app(bot: "Bot") -> FastAPI:
                          "api_key_from_env": from_env},
             "checks": {k: {"de": v[0], "en": v[1]} for k, v in CHECKS.items()},
             "models": MODELS,
+            "rubric": [{"from": lo, "to": hi, "de": de, "en": en} for lo, hi, de, en, _ in RUBRIC],
             "usage": bot.ai.usage(),
         }
 
