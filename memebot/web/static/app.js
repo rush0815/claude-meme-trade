@@ -604,6 +604,12 @@ function renderAISettings(d) {
       <label for="aiBudget">${L("Tagesbudget in USD (danach Pause bis Mitternacht UTC)", "Daily budget in USD (then paused until midnight UTC)")}</label>
       <input id="aiBudget" type="number" inputmode="decimal" step="0.1" min="0" max="100" value="${s.daily_budget_usd}">
     </div>
+    <h3>${L("Bewertungsskala (fest vorgegeben)", "Scoring scale (fixed)")}</h3>
+    <div class="kv">${(d.rubric || []).map((r) => `<div>${r.from}–${r.to}</div><div>${esc(L(r.de, r.en))}</div>`).join("")}</div>
+    <p class="hint">${L(`Gilt für den Gesamt-Score und jede Einzelprüfung. Ein Warnsignal begrenzt den Score auf höchstens 29.
+      Die KI läuft im deterministischen Modus: gleiche Daten ergeben praktisch den gleichen Score.`,
+      `Applies to the overall score and each single check. Any red flag caps the score at 29.
+      The AI runs in deterministic mode: the same data gives practically the same score.`)}</p>
     <h3>${L("Was die KI prüft", "What the AI checks")}</h3>
     <div class="checklist">${checks}</div>
     <h3>${L("Anthropic API-Key", "Anthropic API key")}</h3>

@@ -44,6 +44,24 @@ MODELS = {"claude-haiku-5-5": "Claude Haiku 5.5", "claude-sonnet-5-5": "Claude S
 PRICES = {"claude-haiku-5-5": (0.10, 0.50), "claude-sonnet-5-5": (2.0, 10.0)}   # USD pro Mio. Tokens (ein/aus)
 SEARCH_USD = 0.01                                                                # 10 $ pro 1.000 Suchen
 
+# Feste Bewertungsskala – gilt für den Gesamt-Score und jede einzelne Prüfung
+RUBRIC = [
+    (0, 29, "Kopie/Scam/Spam", "copycat, spam or scam signals",
+     "obvious copy of a famous coin or of today's trend, empty or spammy description, no socials, or any scam signal "
+     "(guaranteed returns, 'next 100x', impersonation of celebrities/brands/real projects, fake partnerships)"),
+    (30, 59, "typischer Meme-Coin", "typical meme coin",
+     "some effort but generic or derivative; links missing, inconsistent or low quality; nothing clearly wrong"),
+    (60, 79, "überdurchschnittlich", "above average",
+     "original idea, coherent story, website and X/Telegram present and consistent with the name"),
+    (80, 100, "herausragend", "outstanding",
+     "rare: clearly above-average effort and originality, strong consistent presence, no red flags at all"),
+]
+
+
+def rubric_text() -> str:
+    return "\n".join(f"- {lo}–{hi}: {desc}" for lo, hi, _de, _en, desc in RUBRIC)
+
+
 DEFAULTS: dict[str, Any] = {
     "enabled": False, "mode": "observe", "model": "claude-haiku-5-5", "min_score": 50,
     "daily_budget_usd": 1.0, "api_key": "",
@@ -196,6 +214,8 @@ class AIAnalyst(Agent):
         system = (
             "You are a sober analyst of Solana meme coins. You judge only the qualitative side of a token; "
             "on-chain security and price action are checked elsewhere. Be skeptical: most meme coins are low-effort. "
+            "Use this fixed scale for the overall score AND for every single check score:\n" + rubric_text() + "\n"
+            "Any red flag caps the overall score at 29. A missing check (no data) counts as neutral 45, not as 0. "
             "Answer with ONE JSON object and nothing else.")
         lines = [f"- {k}: {CHECKS[k][2]}" for k in checks]
         info = {
@@ -239,7 +259,8 @@ class AIAnalyst(Agent):
             return Verdict(True, "keine KI-Prüfungen aktiv")
         system, user, tools = self._prompt(m, meta or {}, checks)
         try:
-            text, usage = await self._call(cfg, system, user, tools)
+            # Temperatur 0: gleiche Daten -> möglichst gleicher Score (vergleichbar über die Zeit)
+            text, usage = await self._call({**cfg, "temperature": 0}, system, user, tools)
         except Exception as e:
             self._record(m, cfg["model"], {}, ok=False, error=str(e))
             self.log(f"{m.symbol}: KI nicht erreichbar ({e}) – Entscheidung ohne KI", "warn", m.mint)
